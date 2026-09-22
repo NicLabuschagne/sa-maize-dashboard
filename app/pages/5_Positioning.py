@@ -70,6 +70,29 @@ def corn_validation() -> dict:
     return out
 
 
+@st.cache_data
+def price_benchmark() -> dict:
+    m = load_macro()
+    m = m[m.series == "cbot_corn"].sort_values("date")
+    if m.empty:
+        return {}
+    px = pd.Series(m.value.to_numpy(), index=pd.DatetimeIndex(m.date).as_unit("ns"))
+    return T.price_benchmark(px, T.load_cot("ZC"))
+
+
+@st.cache_data
+def cross_market() -> pd.DataFrame:
+    m = load_macro()
+    m = m[m.series == "cbot_corn"].sort_values("date")
+    rows = {}
+    if not m.empty:
+        rows["CBOT corn"] = T.dynamics(pd.Series(m.value.to_numpy(),
+                                                 index=pd.DatetimeIndex(m.date).as_unit("ns")))
+    for s_ in ("WMAZ", "YMAZ"):
+        rows[f"SAFEX {s_}"] = T.dynamics(FV.roll_adjusted_index(derived()["cont"], s_))
+    return pd.DataFrame(rows).T
+
+
 idx, panel = safex_trend(sym)
 agg = T.aggregate(panel)
 disp = T.dispersion(panel).dropna()
@@ -150,6 +173,34 @@ else:
                    "blend is kept equal-weight rather than tuned to this, so the port to SAFEX is "
                    "not fitted to corn.")
 
+    B = price_benchmark()
+    if B.get("ok"):
+        st.markdown("##### But a trend model is built from price — does it beat price alone?")
+        st.caption("Tracking COT is not by itself evidence of anything: positioning follows price, "
+                   "and so does any trend model. The question is whether the model adds information "
+                   "beyond raw momentum.")
+        b1, b2 = st.columns([2, 3])
+        with b1:
+            corr = pd.Series(B["corr"], name="corr with COT").sort_values(ascending=False)
+            corr.index = corr.index.str.replace("trend", "TREND MODEL").str.replace("ret_", "price return ")
+            st.dataframe(corr.to_frame().style.format("{:+.3f}"), width="stretch", height=250)
+        with b2:
+            r2 = pd.Series({"12-month price return alone": B["r2_ret12"],
+                            "trend model alone": B["r2_trend"],
+                            "all four return horizons": B["r2_rets"],
+                            "trend model + all four returns": B["r2_both"]}, name="R² explaining COT")
+            st.dataframe(r2.to_frame().style.format("{:.3f}"), width="stretch", height=180)
+            st.markdown(
+                f"Partial correlation of the trend model with COT, **after** controlling for all four "
+                f"return horizons: **{B['partial_trend']:+.2f}**. It is not simply momentum relabelled.")
+        st.info(
+            f"**Where the model earns its keep is in the flow, not the direction.** On weekly *changes* "
+            f"in positioning it scores **{B['dchg_trend']:+.2f}** against **{B['dchg_ret3m']:+.2f}** for a "
+            f"raw 3-month return. The difference is the two features raw momentum lacks and real managed "
+            f"futures have: position size **saturates** rather than scaling without limit, and it is "
+            f"**volatility-scaled** rather than return-scaled. Those are what make it track the turn.",
+            icon="📈")
+
 # ---------------------------------------------------------------- 3. does it port?
 st.markdown("---")
 st.markdown("#### Does it port to SAFEX? The honest answer")
@@ -213,6 +264,31 @@ that is the first thing to do with desk data.
 *would* hold, useful for asking whether your fundamental view is aligned with or against systematic
 momentum. That is a legitimate risk overlay. It is not a flow forecast.
 """)
+
+st.markdown("##### Do the price dynamics port, even if the flows cannot be seen?")
+st.caption("If SAFEX price behaved nothing like CBOT, a trend model would mean something different "
+           "there. It does not — the mechanism transfers cleanly even though the positioning behind "
+           "it cannot be verified.")
+X = cross_market()
+disp_tbl = pd.DataFrame({
+    "annualised vol": X.ann_vol, "return AC(1)": X.ac1, "signal flips / yr": X.flips_per_year,
+    "mean |position|": X.mean_abs_trend, "% held with conviction": X.pct_conviction,
+    "corr(trend, 12m return)": X.corr_trend_ret12, "trend Sharpe, gross": X.trend_sharpe_gross})
+st.dataframe(disp_tbl.style.format({
+    "annualised vol": "{:.1%}", "return AC(1)": "{:+.3f}", "signal flips / yr": "{:.1f}",
+    "mean |position|": "{:.2f}", "% held with conviction": "{:.0%}",
+    "corr(trend, 12m return)": "{:+.3f}", "trend Sharpe, gross": "{:+.2f}"}), width="stretch")
+st.success(
+    "**SAFEX is not a hostile trend market — if anything it trends more cleanly than CBOT corn.** "
+    "Volatility is comparable, first-order return autocorrelation is *higher*, the signal flips "
+    "*less* often, and the gross trend Sharpe is at least as good. So the zero footprint in the "
+    "turnover tests is not because trend following fails here. It is because the money is not here, "
+    "or is too small a share to see. That distinction matters: the overlay is describing a real "
+    "feature of the price series, not an artefact of porting a model somewhere it does not belong.",
+    icon="✅")
+st.caption("Trend Sharpe is gross of costs and single-market — 0.2 to 0.4 is normal for one market; "
+           "diversification across dozens is what makes managed futures work. It is a statement about "
+           "the price series, not a strategy proposal.")
 
 with st.expander("Method"):
     st.markdown(f"""

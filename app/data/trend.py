@@ -114,3 +114,79 @@ def validate_against_cot(trend: pd.Series, cot: pd.DataFrame,
     return {"ok": True, "n": int(len(m)), "corr_level": float(lvl),
             "corr_level_spearman": float(lvl_s), "corr_change": float(chg),
             "first": m["date"].min(), "last": m["date"].max(), "merged": m}
+
+
+# ----------------------------------------------------------------------------- is it just price?
+RETURN_HORIZONS = {"ret_1m": 21, "ret_3m": 63, "ret_6m": 126, "ret_12m": 252}
+
+
+def _r2(y: np.ndarray, X: np.ndarray) -> float:
+    beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+    r = y - X @ beta
+    return float(1 - (r @ r) / ((y - y.mean()) ** 2).sum())
+
+
+def price_benchmark(px: pd.Series, cot: pd.DataFrame, col: str = "net_noncomm_pct_oi") -> dict:
+    """Does the trend model beat raw price momentum at explaining reported positioning?
+
+    A trend model is built from price, so tracking COT is not by itself evidence that it captures
+    anything about positioning. The test is whether it beats price returns, and whether it retains
+    explanatory power once several return horizons are already in the regression.
+    """
+    lp = np.log(px.dropna())
+    feat = pd.DataFrame({"trend": aggregate(trend_panel(px)).to_numpy()}, index=px.dropna().index)
+    for lab, n in RETURN_HORIZONS.items():
+        feat[lab] = (lp - lp.shift(n)).to_numpy()
+    feat = feat.reset_index(names="d")
+    c = cot.dropna(subset=[col]).copy()
+    c["date"] = pd.to_datetime(c["date"]).astype("datetime64[ns]")
+    j = pd.merge_asof(c.sort_values("date"), feat.sort_values("d"), left_on="date", right_on="d",
+                      direction="backward", tolerance=pd.Timedelta("5D")).dropna(
+                          subset=["trend", "ret_12m", col])
+    if len(j) < 50:
+        return {"ok": False, "n": len(j)}
+    y = j[col].to_numpy()
+    rets = list(RETURN_HORIZONS)
+
+    def design(cols: list[str]) -> np.ndarray:
+        return np.column_stack([np.ones(len(j))] + [j[c_].to_numpy() for c_ in cols])
+
+    Xr = design(rets)
+    br, *_ = np.linalg.lstsq(Xr, y, rcond=None)
+    bt, *_ = np.linalg.lstsq(Xr, j.trend.to_numpy(), rcond=None)
+    partial = float(np.corrcoef(j.trend.to_numpy() - Xr @ bt, y - Xr @ br)[0, 1])
+    d = j[["trend", "ret_3m", col]].diff().dropna()
+    return {
+        "ok": True, "n": int(len(j)),
+        "corr": {c_: float(np.corrcoef(j[c_], y)[0, 1]) for c_ in ["trend"] + rets},
+        "r2_trend": _r2(y, design(["trend"])),
+        "r2_ret12": _r2(y, design(["ret_12m"])),
+        "r2_rets": _r2(y, Xr),
+        "r2_both": _r2(y, design(["trend"] + rets)),
+        "partial_trend": partial,
+        "dchg_trend": float(d.trend.corr(d[col])),
+        "dchg_ret3m": float(d.ret_3m.corr(d[col])),
+    }
+
+
+def dynamics(px: pd.Series) -> dict:
+    """How the trend model behaves against price in one market - the basis for asking whether
+    the mechanism ports to a market where positioning cannot be observed."""
+    px = px.dropna()
+    lp = np.log(px)
+    r = lp.diff()
+    agg = aggregate(trend_panel(px)).dropna()
+    years = (px.index[-1] - px.index[0]).days / 365.25
+    flips = int((np.sign(agg) != np.sign(agg.shift())).sum())
+    r12 = (lp - lp.shift(252)).reindex(agg.index)
+    pnl = (agg.shift(1) * r.reindex(agg.index)).dropna()     # gross of costs, by construction
+    return {
+        "ann_vol": float(r.std() * np.sqrt(252)),
+        "ac1": float(r.autocorr(1)), "ac5": float(r.autocorr(5)),
+        "flips_per_year": float(flips / years),
+        "mean_abs_trend": float(agg.abs().mean()),
+        "pct_conviction": float((agg.abs() > 0.5).mean()),
+        "corr_trend_ret12": float(r12.corr(agg)),
+        "trend_sharpe_gross": float(pnl.mean() / pnl.std() * np.sqrt(252)) if pnl.std() else np.nan,
+        "years": float(years),
+    }

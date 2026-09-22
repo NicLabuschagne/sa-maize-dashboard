@@ -97,3 +97,43 @@ def test_corn_validation_holds_on_real_data() -> None:
     assert out["ok"] and out["n"] > 500
     assert out["corr_level"] > 0.6, "method no longer recovers reported corn positioning"
     assert out["corr_change"] > 0.5, "weekly-change tracking has degraded"
+
+
+def test_price_benchmark_detects_pure_momentum_relabelled() -> None:
+    """If reported positioning IS a price return, the trend model must add nothing on top."""
+    px = _series(drift=0.0006, seed=21, n=1400)
+    lp = np.log(px)
+    ret12 = (lp - lp.shift(252)).dropna()
+    weekly = ret12.resample("W-TUE").last().dropna()
+    cot = pd.DataFrame({"date": weekly.index, "net_noncomm_pct_oi": weekly.to_numpy()})
+    b = T.price_benchmark(px, cot)
+    assert b["ok"]
+    assert b["r2_ret12"] > 0.95                       # returns explain it, as constructed
+    assert abs(b["partial_trend"]) < 0.5              # little left for the trend model
+
+
+def test_price_benchmark_reports_all_keys() -> None:
+    px = _series(n=1400, seed=3)
+    weekly = T.aggregate(T.trend_panel(px)).dropna().resample("W-TUE").last().dropna()
+    cot = pd.DataFrame({"date": weekly.index, "net_noncomm_pct_oi": weekly.to_numpy()})
+    b = T.price_benchmark(px, cot)
+    for k in ("corr", "r2_trend", "r2_rets", "r2_both", "partial_trend", "dchg_trend", "dchg_ret3m"):
+        assert k in b
+    assert b["r2_both"] >= b["r2_rets"] - 1e-9        # adding a regressor cannot lower R²
+
+
+def test_dynamics_reports_sane_numbers() -> None:
+    d = T.dynamics(_series(n=1400, seed=5))
+    assert 0 < d["ann_vol"] < 2
+    assert -1 <= d["ac1"] <= 1
+    assert d["flips_per_year"] >= 0
+    assert 0 <= d["mean_abs_trend"] <= 1
+    assert 0 <= d["pct_conviction"] <= 1
+
+
+def test_dynamics_sees_a_trending_market_as_more_persistent() -> None:
+    """A strongly drifting series should flip less often than a random walk."""
+    trending = T.dynamics(_series(n=1600, drift=0.0015, seed=6))
+    choppy = T.dynamics(_series(n=1600, drift=0.0, seed=6))
+    assert trending["flips_per_year"] < choppy["flips_per_year"]
+    assert trending["mean_abs_trend"] > choppy["mean_abs_trend"]
