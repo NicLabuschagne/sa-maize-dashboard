@@ -19,6 +19,7 @@ import pandas as pd
 from scipy import stats
 
 HORIZONS = {"5d": 5, "10d": 10, "1m": 21, "2m": 42, "3m": 63, "6m": 126}
+PRICE_TOL = pd.Timedelta("7D")   # a release must map to a close within a week, else it has no price
 MIN_OBS = 48          # months of history before the first out-of-sample fit
 CPI_LAG_DAYS = 45     # CPI for month m is published ~3 weeks into m+1
 ENTRY_LAG_DAYS = 1    # measure forward returns from the first close at least this many days after the release
@@ -76,7 +77,7 @@ def panel_price(sd: pd.DataFrame, cont: pd.DataFrame, cpi: pd.DataFrame, grain_c
     c = cont[cont.symbol == symbol][["trade_date", "close_1", "spread_2_1_pct_ann"]].copy()
     c["trade_date"] = c["trade_date"].astype("datetime64[ns]")
     p = pd.merge_asof(s.sort_values("vintage_date"), c.sort_values("trade_date"),
-                      left_on="vintage_date", right_on="trade_date", direction="forward")
+                      left_on="vintage_date", right_on="trade_date", direction="forward", tolerance=PRICE_TOL)
     p = p.dropna(subset=["close_1"]).reset_index(drop=True)
     p["real_px"] = real_price(p["close_1"], p["vintage_date"], cpi)
     p["y"] = np.log(p["real_px"])
@@ -94,7 +95,7 @@ def panel_spread(sd: pd.DataFrame, cont: pd.DataFrame, grain_class: str, symbol:
     c = cont[cont.symbol == symbol][["trade_date", "close_1", "spread_2_1_pct_ann"]].copy()
     c["trade_date"] = c["trade_date"].astype("datetime64[ns]")
     p = pd.merge_asof(s.sort_values("vintage_date"), c.sort_values("trade_date"),
-                      left_on="vintage_date", right_on="trade_date", direction="forward")
+                      left_on="vintage_date", right_on="trade_date", direction="forward", tolerance=PRICE_TOL)
     p = p.dropna(subset=["spread_2_1_pct_ann"]).reset_index(drop=True)
     p["y"] = p["spread_2_1_pct_ann"]
     p["x"] = np.log(p["months_cover"])
@@ -128,7 +129,7 @@ def panel_white_yellow(sd: pd.DataFrame, wy: pd.DataFrame, bs: pd.DataFrame) -> 
     s = wy[["trade_date", "wy_spread_pct"]].copy()
     s["trade_date"] = s["trade_date"].astype("datetime64[ns]")
     p = pd.merge_asof(p.sort_values("vintage_date"), s.sort_values("trade_date"),
-                      left_on="vintage_date", right_on="trade_date", direction="forward")
+                      left_on="vintage_date", right_on="trade_date", direction="forward", tolerance=PRICE_TOL)
     p = p.dropna(subset=["wy_spread_pct", "demand_mix"]).reset_index(drop=True)
     p["y"] = p["wy_spread_pct"]
     sp = s.set_index("trade_date")["wy_spread_pct"]

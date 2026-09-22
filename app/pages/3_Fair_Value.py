@@ -185,14 +185,16 @@ def parity_block() -> None:
         f"Putting log(real world parity) into Model A alongside cover raises R² from "
         f"**{aw['base'].r2_full:.2f} to {aw['with_world'].r2_full:.2f}** with a coefficient of "
         f"**{aw['with_world'].coef_full['lw']:+.2f}** (t = {aw['with_world'].tstat_full['lw']:.1f}) — a large gain in "
-        f"explanatory power. It nonetheless makes the signal **worse**: 10-day IC falls from "
-        f"**{b10:+.2f} to {w10:+.2f}**. Controlling for a contemporaneous near-martingale converts the residual from "
-        f"*\"rich against a slow local fundamental\"*, which drifts back, into *\"out of line with CBOT×ZAR today\"*, "
-        f"which the physical trade arbitrages. Fit and forecast are not the same objective. "
-        f"The world price is therefore kept out of Model A and used here, on the leg it actually prices.")
-    st.caption("Robustness: repeating this with the previous CBOT settle instead of the 10:00 UTC print changes the "
-               "10-day IC by under 0.01 — the two world-price series correlate 0.9993 — so the conclusion is not an "
-               "artefact of the snapshot convention.")
+        f"explanatory power. It buys **no** forecasting power: the 10-day IC goes from **{b10:+.2f} to {w10:+.2f}**, "
+        f"i.e. flat to worse depending on the class (the loss is clearer on yellow, where SAFEX tracks CBOT more "
+        f"closely). Controlling for a contemporaneous near-martingale changes what the residual measures — from "
+        f"*rich against a slow local fundamental*, which drifts back over about two weeks, to *out of line with "
+        f"CBOT×ZAR today*, which physical trade arbitrages. Fit and forecast are different objectives, and R² picked "
+        f"the wrong one. The world price is therefore kept out of Model A and used here, on the leg it actually prices.")
+    st.caption("Timing robustness: repeating this with the previous CBOT settle instead of the 10:00 UTC print moves "
+               "the 10-day IC by under 0.005 — the two world-price series correlate 0.9993 — so the conclusion does "
+               "not rest on the snapshot convention. Getting the convention right still matters: the same-day CBOT "
+               "settle is not knowable at the SAFEX mark, so using it would be look-ahead regardless of its effect.")
 
 
 tabA, tabB, tabC, tabD = st.tabs(["A · Flat price vs cover", "B · Calendar spread vs cover", "C · White premium",
