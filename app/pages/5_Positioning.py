@@ -11,7 +11,7 @@ import streamlit as st
 from app import plots as P
 from app.data import fairvalue as FV
 from app.data import trend as T
-from app.data.warehouse import load_cot, load_macro
+from app.data.warehouse import load_macro
 from app.state import derived, sidebar
 
 st.set_page_config(page_title="Positioning", layout="wide")
@@ -51,8 +51,7 @@ def corn_validation() -> dict:
     px = pd.Series(m.value.to_numpy(), index=pd.DatetimeIndex(m.date).as_unit("ns"))
     panel = T.trend_panel(px)
     agg = T.aggregate(panel)
-    cot = load_cot()
-    cot = cot[cot.symbol == "ZC"]
+    cot = T.load_cot("ZC")
     if cot.empty:
         return {}
     out = T.validate_against_cot(agg, cot)

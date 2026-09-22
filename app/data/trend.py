@@ -15,13 +15,31 @@ Each signal returns a position in [-1, +1]: sign is direction, magnitude is conv
 """
 from __future__ import annotations
 
+import duckdb
 import numpy as np
 import pandas as pd
+
+from config import DB_PATH
 
 CROSSOVERS: tuple[tuple[int, int], ...] = ((8, 24), (16, 48), (32, 96), (64, 192))
 MOMENTUM: tuple[int, ...] = (21, 63, 126, 252)
 VOL_WINDOW = 252
 MIN_PERIODS = 60
+
+
+def load_cot(symbol: str | None = None) -> pd.DataFrame:
+    """CFTC Commitments of Traders. Empty frame if it has not been fetched."""
+    try:
+        con = duckdb.connect(str(DB_PATH), read_only=True)
+    except Exception:  # noqa: BLE001
+        return pd.DataFrame(columns=["symbol", "date", "net_noncomm_pct_oi"])
+    try:
+        q = "SELECT * FROM cot" + (f" WHERE symbol = '{symbol}'" if symbol else "") + " ORDER BY date"
+        return con.execute(q).df()
+    except Exception:  # noqa: BLE001 - table absent
+        return pd.DataFrame(columns=["symbol", "date", "net_noncomm_pct_oi"])
+    finally:
+        con.close()
 
 
 def _squash(x: pd.Series) -> pd.Series:
