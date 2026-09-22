@@ -190,18 +190,36 @@ slippage = c3.number_input("Slippage (R/t)", 0.0, 50.0, 2.0, 0.5)
 size_by_z = c4.checkbox("Size by |z|", value=False, help="Scale position with conviction, capped at 3σ")
 costs = BT.CostModel(half_spread, brokerage, slippage)
 
+_mys = sorted(p.marketing_year.unique())
 holdout_from = st.select_slider(
-    "Hold out from", options=sorted(p.marketing_year.unique()),
-    value=sorted(p.marketing_year.unique())[-4],
-    help="Everything from this marketing year onward is withheld while you explore, then scored once.")
+    "Hold out from", options=_mys + ["(no holdout)"], value=_mys[-2],
+    help="Everything from this marketing year onward is withheld from the equity curve below and "
+         "scored once, separately. Move it right to bring recent seasons into the backtest; pick "
+         "'(no holdout)' to use the whole sample.")
 
 ent = matched[["vintage_date", "z", "close_1"]].rename(columns={"close_1": "front_close"}).copy()
 ent["marketing_year"] = matched["marketing_year"].to_numpy()
-is_ent = ent[ent.marketing_year < holdout_from]
-oos_ent = ent[ent.marketing_year >= holdout_from]
+if holdout_from == "(no holdout)":
+    is_ent, oos_ent = ent, ent.iloc[0:0]
+else:
+    is_ent = ent[ent.marketing_year < holdout_from]
+    oos_ent = ent[ent.marketing_year >= holdout_from]
 
 res = BT.run_backtest(idx, is_ent, horizon=bt_h, costs=costs, stop=stop, target=target,
                       size_by_z=size_by_z)
+
+if len(is_ent):
+    _lo, _hi = pd.to_datetime(is_ent.vintage_date).agg(["min", "max"])
+    st.caption(
+        f"Backtesting **{len(is_ent)} of {len(ent)}** matched releases — "
+        f"{_lo:%b %Y} to {_hi:%b %Y}"
+        + (f", with {len(oos_ent)} held out from {holdout_from}." if len(oos_ent) else " (no holdout).")
+        + f" The equity curve ends where the holdout begins. The final release also needs "
+          f"{bt_h} trading days of price history after it to complete a trade, so the newest one or "
+          f"two releases may not produce a trade yet.")
+else:
+    st.warning("Every matched release falls inside the holdout — move the slider right, or pick "
+               "'(no holdout)', to see an equity curve.", icon="⚠️")
 
 # --- trial counter: every distinct configuration this session is a trial ------------------
 cfg = (cls, tuple(conditions), tuple(months), bt_h, exit_rule, stop, target, size_by_z,
@@ -227,8 +245,8 @@ if s["n_trades"]:
     P.line(fig, eq.index, (eq - 1) * 100, "equity (in-sample)", entity=cls,
            hover="%{y:+.1f}%<extra></extra>")
     fig.add_hline(y=0, line=dict(color=P.muted(), width=1))
-    P.layout(fig, "Cumulative return, equal-weight across open trades, net of costs",
-             ytitle="%", height=300)
+    P.layout(fig, f"Cumulative return, equal-weight across open trades, net of costs "
+                  f"({eq.index.min():%b %Y} – {eq.index.max():%b %Y})", ytitle="%", height=300)
     st.plotly_chart(fig, width="stretch")
 
 # --- the honest part ----------------------------------------------------------------------
