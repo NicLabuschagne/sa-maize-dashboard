@@ -39,11 +39,13 @@ def muted() -> str:
 def layout(fig: go.Figure, title: str = "", height: int = 380, ytitle: str = "", xtitle: str = "") -> go.Figure:
     d = _dark()
     fig.update_layout(
-        title=dict(text=title, font=dict(size=15, color=_TEXT[d])),
-        height=height, margin=dict(l=16, r=16, t=44 if title else 16, b=16),
+        title=dict(text=title, font=dict(size=15, color=_TEXT[d]), x=0, xanchor="left",
+                   y=1.0, yanchor="top", pad=dict(t=6)),
+        height=height, margin=dict(l=16, r=16, t=72 if title else 36, b=16),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color=_TEXT2[d], size=12),
-        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0, bgcolor="rgba(0,0,0,0)"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0, bgcolor="rgba(0,0,0,0)",
+                    font=dict(size=11)),
         hovermode="x unified",
     )
     grid = dict(gridcolor=_GRID[d], gridwidth=1, zeroline=False, linecolor=_GRID[d], showline=False)
@@ -80,7 +82,9 @@ def season_overlay(piv: pd.DataFrame, title: str, entity: str, ytitle: str = "t"
     return fig
 
 
-def add_vlines(fig: go.Figure, dates: pd.Series, label: str = "") -> go.Figure:
+def add_vlines(fig: go.Figure, dates: pd.Series, label: str = "", xmax: pd.Timestamp | None = None) -> go.Figure:
+    if xmax is not None:
+        dates = dates[dates <= xmax]
     for d in dates:
         fig.add_vline(x=d, line=dict(color=muted(), width=1, dash="dot"), opacity=0.6)
     if label and len(dates):

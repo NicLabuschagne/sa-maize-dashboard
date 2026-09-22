@@ -30,11 +30,13 @@ for sym in ("WMAZ", "YMAZ"):
     c = cont[cont.symbol == sym]
     P.line(fig, c.trade_date, c.close_1, f"{sym} front", entity=sym, hover="R%{y:,.0f}<extra>" + sym + "</extra>")
 if show_my:
-    P.add_vlines(fig, pd.Series([pd.Timestamp(y, 5, 1) for y in range(start.year, 2027)]), "MY start")
+    P.add_vlines(fig, pd.Series([pd.Timestamp(y, 5, 1) for y in range(start.year, 2030)]), "MY start",
+                 xmax=cont.trade_date.max())
 if show_vint:
     v = sd[(sd.grain_class == "total") & (sd.vintage_date >= pd.Timestamp(start))].vintage_date
     P.add_vlines(fig, v)
 P.layout(fig, "Front-month close, main delivery months (Mar/May/Jul/Sep/Dec), rolled 7 days before expiry", ytitle="R/t")
+fig.update_xaxes(range=[pd.Timestamp(start), cont.trade_date.max()])
 with c1:
     st.plotly_chart(fig, use_container_width=True)
 
