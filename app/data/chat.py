@@ -213,6 +213,18 @@ def resolve_api_key() -> str | None:
         return None
 
 
+def resolve_workspace_id() -> str | None:
+    """Org-scoped keys must name a workspace on every request. Not a secret - just an identifier."""
+    if os.environ.get("ANTHROPIC_WORKSPACE_ID"):
+        return os.environ["ANTHROPIC_WORKSPACE_ID"]
+    try:
+        import streamlit as st
+
+        return st.secrets.get("ANTHROPIC_WORKSPACE_ID") or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def key_looks_valid(key: str | None) -> tuple[bool, str]:
     """Catch the common paste error: the Console's key ID instead of the secret."""
     if not key:
@@ -238,7 +250,11 @@ def ask(history: list[dict], data_only: bool = True, db_path=DB_PATH) -> Answer:
     except ImportError:
         return Answer(text="", error="The `anthropic` package is not installed (pip install anthropic).")
 
-    client = anthropic.Anthropic(api_key=resolve_api_key())
+    ws = resolve_workspace_id()
+    client = anthropic.Anthropic(
+        api_key=resolve_api_key(),
+        default_headers={"anthropic-workspace-id": ws} if ws else None,
+    )
     messages: list[dict] = [{"role": m["role"], "content": m["content"]} for m in history]
     system = _system_prompt(schema_text(db_path), data_only)
     queries: list[dict] = []
@@ -278,7 +294,14 @@ def ask(history: list[dict], data_only: bool = True, db_path=DB_PATH) -> Answer:
     except anthropic.RateLimitError:
         return Answer(text="", queries=queries, error="Rate limited by the API - try again shortly.")
     except anthropic.APIStatusError as exc:
-        return Answer(text="", queries=queries, error=f"API error {exc.status_code}: {exc.message}")
+        msg = str(exc.message)
+        if "not scoped to a workspace" in msg:
+            msg = ("This key is org-scoped. Either create a key inside a workspace, or add "
+                   "ANTHROPIC_WORKSPACE_ID = \"wrkspc_...\" to .streamlit/secrets.toml "
+                   "(Console -> Settings -> Workspaces).")
+        elif "credit balance" in msg.lower():
+            msg = "This workspace has no API credit. Top it up under Settings -> Billing."
+        return Answer(text="", queries=queries, error=f"API error {exc.status_code}: {msg}")
     except anthropic.APIConnectionError:
         return Answer(text="", queries=queries, error="Could not reach the API - check the network.")
 
