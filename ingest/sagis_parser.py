@@ -19,8 +19,13 @@ from pathlib import Path
 import pandas as pd
 
 CLASS_COLS = {"white": 0, "yellow": 1, "total": 2}
-BLOCK_START = [3, 6, 9, 13]
-BLOCK_TYPES = ["prev_month", "latest_month", "ytd", "ytd_prior"]
+# Block roles by number of White/Yellow/Total blocks found in the header row.
+# The June release (first month of the marketing year) has only latest-month and
+# prior-year blocks; latest-month is then also the year-to-date figure.
+BLOCK_ROLES = {
+    4: [("prev_month",), ("latest_month",), ("ytd",), ("ytd_prior",)],
+    2: [("latest_month", "ytd"), ("ytd_prior",)],
+}
 
 MONTHS = {m: i for i, m in enumerate(
     ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
@@ -64,7 +69,7 @@ def _clean(v: object) -> str:
 
 def _parse_month_label(text: str) -> tuple[int, int] | None:
     """'Dec/Des 2003' -> (2003, 12); 'Jul 2026' -> (2026, 7). None if not a month."""
-    m = re.search(r"([A-Za-z]{3,4})(?:/[A-Za-z]+)?\s+(\d{4})", text)
+    m = re.search(r"([A-Za-z]{3,9})(?:/[A-Za-z]+)?\s+(\d{4})", text)
     if not m:
         return None
     mon = MONTHS.get(m.group(1).lower()[:4]) or MONTHS.get(m.group(1).lower()[:3])
@@ -78,19 +83,34 @@ def _detect_unit_multiplier(df: pd.DataFrame) -> float:
     return 1.0
 
 
-def _find_header_row(df: pd.DataFrame) -> int:
+def _find_header(df: pd.DataFrame) -> tuple[int, list[int]]:
+    """Return (header_row, block_start_columns) for the White/Yellow/Total header."""
     for i in range(min(12, len(df))):
-        if all(_clean(df.iat[i, c]).lower().startswith("white") for c in BLOCK_START):
-            return i
+        starts = [c for c in range(df.shape[1]) if _clean(df.iat[i, c]).lower().startswith("white")]
+        if len(starts) in BLOCK_ROLES:
+            return i, starts
     raise ValueError("White/Yellow/Total header row not found")
 
 
-def _block_labels(df: pd.DataFrame, header_row: int) -> list[str]:
+def _load_table(path: Path) -> pd.DataFrame:
+    """Some releases carry a notes sheet first; return the sheet holding the table."""
+    x = pd.ExcelFile(path)
+    for name in x.sheet_names:
+        df = x.parse(name, header=None)
+        try:
+            _find_header(df)
+            return df
+        except ValueError:
+            continue
+    raise ValueError("White/Yellow/Total header row not found")
+
+
+def _block_labels(df: pd.DataFrame, header_row: int, starts: list[int]) -> list[str]:
     """Best text label for each block from the rows just above the header."""
     labels = []
-    for c in BLOCK_START:
+    for c in starts:
         cands = [_clean(df.iat[r, c]) for r in range(max(0, header_row - 3), header_row)]
-        cands = [t for t in cands if t and not re.search(r"progressive|preliminary", t, re.I)]
+        cands = [t for t in cands if t and not re.search(r"progressive|preliminary|final", t, re.I)]
         labels.append(cands[-1] if cands else "")
     return labels
 
@@ -100,7 +120,10 @@ def _vintage_from_name(path: Path) -> tuple[date | None, bool]:
     if not m:
         return None, False
     d = m.group(1)
-    return date(int(d[:4]), int(d[4:6]), int(d[6:8])), m.group(2).lower() == "f"
+    try:
+        return date(int(d[:4]), int(d[4:6]), int(d[6:8])), m.group(2).lower() == "f"
+    except ValueError:  # season-summary files like Mielies20002001.xls
+        return None, False
 
 
 def parse_sagis_file(path: str | Path) -> dict:
@@ -110,14 +133,16 @@ def parse_sagis_file(path: str | Path) -> dict:
     if vintage is None:
         return {"ok": False, "rows": None, "meta": {"file": path.name}, "error": "not a monthly release"}
     try:
-        df = pd.read_excel(path, header=None)
-        header_row = _find_header_row(df)
+        df = _load_table(path)
+        header_row, starts = _find_header(df)
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "rows": None, "meta": {"file": path.name}, "error": str(exc)}
 
     mult = _detect_unit_multiplier(df)
-    labels = _block_labels(df, header_row)
-    latest = _parse_month_label(labels[1]) or _parse_month_label(labels[0])
+    labels = _block_labels(df, header_row, starts)
+    roles = BLOCK_ROLES[len(starts)]
+    latest_idx = next(i for i, r in enumerate(roles) if "latest_month" in r)
+    latest = _parse_month_label(labels[latest_idx])
     if latest is None:
         return {"ok": False, "rows": None, "meta": {"file": path.name, "labels": labels},
                 "error": "could not parse latest-month label"}
@@ -134,7 +159,7 @@ def parse_sagis_file(path: str | Path) -> dict:
         attr = next((a for pat, a in LABEL_MAP if re.match(pat, label.lower())), None)
         if attr is None:
             continue
-        for btype, bstart, blabel in zip(BLOCK_TYPES, BLOCK_START, labels):
+        for btypes, bstart, blabel in zip(roles, starts, labels):
             for cls, off in CLASS_COLS.items():
                 v = df.iat[i, bstart + off]
                 if isinstance(v, str):
@@ -142,8 +167,9 @@ def parse_sagis_file(path: str | Path) -> dict:
                 v = pd.to_numeric(v, errors="coerce")
                 if pd.isna(v):
                     continue
-                rows.append({"period_type": btype, "period_label": blabel,
-                             "attribute": attr, "grain_class": cls, "value_t": float(v) * mult})
+                for btype in btypes:
+                    rows.append({"period_type": btype, "period_label": blabel,
+                                 "attribute": attr, "grain_class": cls, "value_t": float(v) * mult})
 
     out = pd.DataFrame(rows)
     out.insert(0, "vintage_date", pd.Timestamp(vintage))

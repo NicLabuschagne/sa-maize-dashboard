@@ -13,7 +13,7 @@ import pandas as pd
 COLS = {
     "TradeDate": "trade_date", "ExpiryDate": "expiry_date", "Expiry": "expiry",
     "ShortName": "symbol", "Open": "open", "High": "high", "Low": "low", "Close": "close",
-    "Change": "change", "Volume": "volume", "OI": "open_interest", "ContractSize": "contract_size",
+    "Change": "change", "Volume": "volume", "OI": "open_interest",
 }
 
 
@@ -24,7 +24,7 @@ def load_safex(raw_dir: str | Path, symbols: tuple[str, ...] = ("WMAZ", "YMAZ"))
         return {"ok": False, "prices": None, "meta": {"files": 0}, "error": "no SAFEX files found"}
     frames = []
     for f in files:
-        d = pd.read_excel(f, sheet_name="PricingDetail", usecols=list(COLS))
+        d = pd.read_excel(f, sheet_name="PricingDetail", usecols=lambda c: c in COLS)
         d = d[d["ShortName"].isin(symbols)].rename(columns=COLS)
         d["source_file"] = f.name
         frames.append(d)
