@@ -128,7 +128,8 @@ st.caption(
     "consumption held as stock at the latest SAGIS release."
 )
 
-c1, c2, c3 = st.columns(3)
+c1, c2, c3, c4 = st.columns(4)
 c1.page_link("pages/0_Overview.py", label="Overview →")
 c2.page_link("pages/3_Fair_Value.py", label="Fair Value models →")
-c3.page_link("pages/5_Ask.py", label="Ask the desk →")
+c3.page_link("pages/5_Positioning.py", label="Positioning →")
+c4.page_link("pages/6_Ask.py", label="Ask the desk →")

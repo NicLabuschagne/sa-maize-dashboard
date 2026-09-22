@@ -49,3 +49,12 @@ def load_macro_snap() -> pd.DataFrame:
 @st.cache_data
 def load_signals() -> pd.DataFrame:
     return _query("SELECT * FROM signals ORDER BY model, grain_class, vintage_date")
+
+
+@st.cache_data
+def load_cot() -> pd.DataFrame:
+    """CFTC Commitments of Traders. Empty frame if not fetched."""
+    try:
+        return _query("SELECT * FROM cot ORDER BY symbol, date")
+    except Exception:  # noqa: BLE001 - table not built yet
+        return pd.DataFrame(columns=["symbol", "date", "net_noncomm_pct_oi"])

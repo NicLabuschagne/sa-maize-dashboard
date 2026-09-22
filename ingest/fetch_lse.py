@@ -94,6 +94,46 @@ def fetch_snapshots(api_key: str | None = None, start_year: int = 2009) -> dict:
             "coverage": m.groupby("series").date.agg(["min", "max", "count"]).to_dict("index")}
 
 
+def fetch_cot(symbols: tuple[str, ...] = ("ZC", "ZW", "ZS"), api_key: str | None = None,
+              start: str = "2010-01-01") -> dict:
+    """CFTC Commitments of Traders into table `cot`.
+
+    Positions are as of Tuesday; `release_date` is the Friday they became public. Keep both:
+    use `date` to ask what positioning was, `release_date` to ask what was knowable.
+    """
+    from lse import LSE
+
+    key = api_key or os.environ.get("LSE_API_KEY")
+    if not key:
+        return {"ok": False, "rows": 0, "error": "LSE_API_KEY not set"}
+    c = LSE(api_key=key)
+    frames = []
+    for sym in symbols:
+        rows = c.cot(sym, start=start, limit=5000)
+        if rows:
+            frames.append(pd.DataFrame(rows))
+    if not frames:
+        return {"ok": False, "rows": 0, "error": "no COT rows returned"}
+    d = pd.concat(frames, ignore_index=True)
+    keep = ["symbol", "date", "release_date", "open_interest", "noncomm_long", "noncomm_short",
+            "noncomm_spread", "comm_long", "comm_short", "nonrept_long", "nonrept_short"]
+    d = d[[c_ for c_ in keep if c_ in d.columns]].copy()
+    for c_ in ("date", "release_date"):
+        if c_ in d:
+            d[c_] = pd.to_datetime(d[c_])
+    d["net_noncomm"] = d["noncomm_long"] - d["noncomm_short"]
+    d["net_noncomm_pct_oi"] = d["net_noncomm"] / d["open_interest"].replace(0, pd.NA)
+    d = d.dropna(subset=["date"]).drop_duplicates(["symbol", "date"]).sort_values(["symbol", "date"])
+    con = duckdb.connect(str(DB_PATH))
+    try:
+        con.execute("CREATE OR REPLACE TABLE cot AS SELECT * FROM d")
+    finally:
+        con.close()
+    return {"ok": True, "rows": len(d),
+            "coverage": d.groupby("symbol").date.agg(["min", "max", "count"]).to_dict("index")}
+
+
 if __name__ == "__main__":
     print(fetch_macro())
     print(fetch_snapshots())
+    print(fetch_cot())
