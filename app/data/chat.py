@@ -186,6 +186,7 @@ class Answer:
     queries: list[dict] = field(default_factory=list)
     error: str | None = None
     demo: bool = False
+    local: bool = False
     stop_reason: str | None = None
     usage: list[dict] = field(default_factory=list)
 
@@ -253,7 +254,7 @@ def has_api_key() -> bool:
 def ask(history: list[dict], data_only: bool = True, db_path=DB_PATH) -> Answer:
     """Run the tool loop. `history` is [{role, content}] with plain-string content."""
     if not has_api_key():
-        return demo_answer(history)
+        return local_answer(history, db_path)
     try:
         import anthropic
     except ImportError:
@@ -322,41 +323,29 @@ def ask(history: list[dict], data_only: bool = True, db_path=DB_PATH) -> Answer:
         return Answer(text="", queries=queries, error="Could not reach the API - check the network.")
 
 
-# ----------------------------------------------------------------------------- offline demo
-DEMO = [
-    ("cover", ("white|yellow|cover|stock"),
-     "SELECT grain_class, vintage_date, latest_month, round(months_cover,2) AS months_cover,\n"
-     "       round(closing_stock) AS closing_stock_t\nFROM (SELECT * FROM signals) s\n"
-     "JOIN balance_sheet b ON FALSE -- illustrative only\nLIMIT 0"),
-]
+# ----------------------------------------------------------------------------- local (no model)
+def local_answer(history: list[dict], db_path=DB_PATH) -> Answer:
+    """Rules-based backend: classify the question, run the matching parameterised SQL.
 
+    Deterministic by construction - it cannot invent a figure. Either an intent matches and the
+    rows are real, or it reports that it did not understand.
+    """
+    from app.data import router as R
 
-def demo_answer(history: list[dict], db_path=DB_PATH) -> Answer:
-    """No API key: answer a few canned questions with real numbers pulled from the warehouse."""
-    q = (history[-1]["content"] if history else "").lower()
-    if re.search(r"rich|cheap|fair value|z[- ]?score|dislocat", q):
-        sql = ("SELECT model, grain_class, vintage_date, round(z,2) AS z, round(months_cover,2) AS cover "
-               "FROM signals WHERE vintage_date = (SELECT max(vintage_date) FROM signals) ORDER BY model, grain_class")
-        say = ("Latest fair-value readings by model. z is positive when the market is rich to the "
-               "model's fair value. Model A is the outright price, B the calendar spread, D the parity basis.")
-    elif re.search(r"cover|stock|balance|s&d|sagis", q):
-        sql = ("SELECT grain_class, latest_month, round(months_cover,2) AS months_cover "
-               "FROM signals WHERE model='A' AND vintage_date=(SELECT max(vintage_date) FROM signals) "
-               "ORDER BY grain_class")
-        say = "Months of cover at the most recent SAGIS release."
-    elif re.search(r"price|safex|front|wmaz|ymaz", q):
-        sql = ("SELECT symbol, expiry, close, open_interest FROM prices "
-               "WHERE trade_date=(SELECT max(trade_date) FROM prices) AND open_interest > 500 "
-               "ORDER BY symbol, expiry_date LIMIT 10")
-        say = "Most recent SAFEX session, contracts with meaningful open interest."
-    else:
+    q = (history[-1]["content"] if history else "").strip()
+    hit = R.route(q)
+    if hit is None:
+        examples = "\n".join(f"- {e}" for e in R.EXAMPLES)
         return Answer(
-            text=("**Demo mode** - no `ANTHROPIC_API_KEY` is set, so I am not calling the model. "
-                  "I can still show three canned queries: try *is white rich right now?*, "
-                  "*what is months of cover?* or *show me the latest prices*.\n\n"
-                  "Set the key in the shell that launches Streamlit to enable live questions."),
-            demo=True)
-    r = run_sql(sql, db_path)
-    r["purpose"] = "canned demo query"
-    return Answer(text=f"**Demo mode** (no API key set - this is a canned query, not a model answer).\n\n{say}",
-                  queries=[r], demo=True)
+            text=("I could not map that to a query I know.\n\n"
+                  "This is the **rules-based backend** - it matches a fixed set of question patterns "
+                  "rather than writing free-form SQL. Try one of:\n\n" + examples),
+            local=True)
+    r = run_sql(hit.sql, db_path)
+    r["purpose"] = hit.purpose
+    text = f"**{hit.purpose}**"
+    if hit.note:
+        text += "\n\n" + hit.note
+    if r["ok"] and r["n"] == 0:
+        text += "\n\n" + "No rows matched - try loosening the threshold or picking the other class."
+    return Answer(text=text, queries=[r], local=True)

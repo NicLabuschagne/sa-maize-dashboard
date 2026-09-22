@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import streamlit as st
 
 from app.data import chat as C
+from app.data import router as R
 from app.state import sidebar
 
 st.set_page_config(page_title="Ask", layout="wide")
@@ -23,12 +24,15 @@ with c2:
                           help="On: the model may only state what a query returned, and must decline "
                                "anything the warehouse cannot answer. Off: general knowledge is allowed "
                                "but every such sentence is flagged.")
-    _key = C.resolve_api_key()
-    _ok, _why = C.key_looks_valid(_key)
-    if not _ok:
-        st.warning(f"Demo mode — {_why}. Set `ANTHROPIC_API_KEY` in the shell that launches Streamlit, "
-                   f"or copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml` (gitignored) "
-                   f"and paste the key there.", icon="🔑")
+    _ok, _why = C.key_looks_valid(C.resolve_api_key())
+    backend = st.radio(
+        "Backend", ["Rules-based (free)", "Claude (needs API credit)"],
+        index=0 if not _ok else 1, horizontal=True,
+        help="Rules-based maps your question to a fixed set of SQL templates — deterministic, "
+             "offline and free. Claude writes SQL from scratch and handles any phrasing.")
+    use_llm = backend.startswith("Claude")
+    if use_llm and not _ok:
+        st.warning(f"No usable key — {_why}.", icon="🔑")
 
 if "chat" not in st.session_state:
     st.session_state.chat = []
@@ -66,6 +70,15 @@ def render_answer(text: str) -> None:
 
 
 def render_badge(a: C.Answer) -> None:
+    if a.local:
+        if a.data_backed:
+            tables = ", ".join(a.tables_used) or "warehouse"
+            st.success(f"**From your data** — rules-based backend, 1 query against `{tables}`. "
+                       f"No model was called, so nothing here is generated text.", icon="✅")
+        else:
+            st.info("**Rules-based backend** — the question did not match a known pattern, so no "
+                    "query ran and no data is shown.", icon="🧭")
+        return
     if a.demo:
         st.info("**Demo mode** — canned query, no model call.", icon="🧪")
         return
@@ -101,7 +114,7 @@ if prompt := st.chat_input("e.g. when was white maize last more than 1.5 sigma r
                for t in st.session_state.chat if t["role"] == "user" or t["answer"].text]
     with st.chat_message("assistant"):
         with st.spinner("Querying the warehouse…"):
-            a = C.ask(history, data_only=data_only)
+            a = C.ask(history, data_only=data_only) if use_llm else C.local_answer(history)
         if a.error:
             st.error(a.error)
         render_answer(a.text)
@@ -117,24 +130,28 @@ with st.sidebar:
 
 with st.expander("What this can and cannot do"):
     st.markdown(f"""
-**Can**
-- Query every table in the warehouse: `prices`, `balance_sheet` (point-in-time SAGIS),
-  `macro`, `macro_snap` (10:00 UTC parity snapshots), `signals` (fair value, residuals, z by date),
-  `ingest_log`.
-- Explain the methodology behind the models, because it is described in its system prompt.
+**Two backends, same interface and the same provenance rules.**
 
-**Cannot**
-- Write anything. The connection is read-only, and only a single `SELECT`/`WITH` per call is accepted —
-  writes, DDL and multi-statement input are rejected before execution.
-- Fetch new data, or call the Python model functions directly. If a number is not in the warehouse,
-  rebuild it with `python ingest/build_signals.py` first.
+*Rules-based (free, default)* — your question is matched against a fixed set of intents, entities are
+extracted (class, model, threshold, horizon, year, top-N) and a parameterised SQL template is filled.
+It is deterministic: it cannot invent a number or a column. If nothing matches it says so rather
+than guessing. No network, no account, no cost.
 
-**How provenance is enforced**
-1. The badge under every answer is computed by this page from the queries that actually executed.
-   Zero successful queries always renders *Not from your data*, whatever the answer claims.
-2. Data-only mode (default on) instructs the model to decline rather than guess.
-3. With data-only off, any sentence not derived from a query must be marked `[GK]`, and this page
-   renders those as amber warnings.
+*Claude* — writes SQL from scratch against the schema, handles any phrasing, and can chain several
+queries. Needs API credit on the Anthropic account.
 
-Model: `{C.MODEL}`. Results are capped at {C.ROW_CAP} rows per query and {C.MAX_ROUNDS} query rounds per question.
+**Both can** query `prices`, `balance_sheet` (point-in-time SAGIS), `macro`, `macro_snap`
+(10:00 UTC parity snapshots), `signals` (fair value, residual, z by date) and `ingest_log`.
+
+**Neither can** write anything: the connection is read-only and only a single `SELECT`/`WITH` per
+call is accepted — writes, DDL and multi-statement input are rejected before execution.
+
+**Provenance** — the badge under each answer is computed by this page from the queries that actually
+executed. Zero successful queries always renders as not-from-your-data, whatever the answer says.
+
+Questions the rules-based backend understands:
+
+{chr(10).join("- " + e for e in R.EXAMPLES)}
+
+Model when using Claude: `{C.MODEL}`. Caps: {C.ROW_CAP} rows per query, {C.MAX_ROUNDS} query rounds per question.
 """)

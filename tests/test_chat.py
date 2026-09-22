@@ -98,12 +98,6 @@ def test_schema_text_lists_core_tables() -> None:
         assert t in s
 
 
-def test_demo_answer_runs_without_api_key() -> None:
-    a = C.demo_answer([{"role": "user", "content": "is white rich right now?"}])
-    assert a.demo
-    if DB_PATH.exists():
-        assert a.queries and a.queries[0]["ok"]
-
 
 @pytest.mark.parametrize("key,ok", [
     ("sk-ant-api03-abc", True),
