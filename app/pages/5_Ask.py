@@ -23,8 +23,12 @@ with c2:
                           help="On: the model may only state what a query returned, and must decline "
                                "anything the warehouse cannot answer. Off: general knowledge is allowed "
                                "but every such sentence is flagged.")
-    if not C.has_api_key():
-        st.warning("No `ANTHROPIC_API_KEY` found — running in demo mode with canned queries.", icon="🔑")
+    _key = C.resolve_api_key()
+    _ok, _why = C.key_looks_valid(_key)
+    if not _ok:
+        st.warning(f"Demo mode — {_why}. Set `ANTHROPIC_API_KEY` in the shell that launches Streamlit, "
+                   f"or copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml` (gitignored) "
+                   f"and paste the key there.", icon="🔑")
 
 if "chat" not in st.session_state:
     st.session_state.chat = []

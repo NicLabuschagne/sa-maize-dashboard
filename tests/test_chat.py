@@ -103,3 +103,19 @@ def test_demo_answer_runs_without_api_key() -> None:
     assert a.demo
     if DB_PATH.exists():
         assert a.queries and a.queries[0]["ok"]
+
+
+@pytest.mark.parametrize("key,ok", [
+    ("sk-ant-api03-abc", True),
+    ("apikey_01FfSrWMqBJQk76ua1pFxkYL", False),   # Console key ID, not the secret
+    ("", False),
+    (None, False),
+    ("random-string", False),
+])
+def test_key_looks_valid_catches_the_key_id_paste_error(key, ok: bool) -> None:
+    assert C.key_looks_valid(key)[0] is ok
+
+
+def test_key_id_reason_is_explanatory() -> None:
+    _, why = C.key_looks_valid("apikey_0123")
+    assert "key ID" in why and "sk-ant-api03-" in why

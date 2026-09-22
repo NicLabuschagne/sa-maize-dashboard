@@ -200,8 +200,33 @@ class Answer:
         return sorted(hit)
 
 
+def resolve_api_key() -> str | None:
+    """Environment first, then .streamlit/secrets.toml (gitignored), so keys stay out of the repo."""
+    for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+        if os.environ.get(var):
+            return os.environ[var]
+    try:
+        import streamlit as st
+
+        return st.secrets.get("ANTHROPIC_API_KEY") or None
+    except Exception:  # noqa: BLE001 - no secrets file, or not running under Streamlit
+        return None
+
+
+def key_looks_valid(key: str | None) -> tuple[bool, str]:
+    """Catch the common paste error: the Console's key ID instead of the secret."""
+    if not key:
+        return False, "no key found"
+    if key.startswith("apikey_"):
+        return False, ("that is the key ID shown in the Console, not the secret. The usable key starts "
+                       "with 'sk-ant-api03-' and is displayed only once, when the key is created.")
+    if not key.startswith(("sk-ant-", "sk-")):
+        return False, "does not look like an Anthropic API key (expected a 'sk-ant-...' secret)"
+    return True, "ok"
+
+
 def has_api_key() -> bool:
-    return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+    return key_looks_valid(resolve_api_key())[0]
 
 
 def ask(history: list[dict], data_only: bool = True, db_path=DB_PATH) -> Answer:
@@ -213,7 +238,7 @@ def ask(history: list[dict], data_only: bool = True, db_path=DB_PATH) -> Answer:
     except ImportError:
         return Answer(text="", error="The `anthropic` package is not installed (pip install anthropic).")
 
-    client = anthropic.Anthropic()
+    client = anthropic.Anthropic(api_key=resolve_api_key())
     messages: list[dict] = [{"role": m["role"], "content": m["content"]} for m in history]
     system = _system_prompt(schema_text(db_path), data_only)
     queries: list[dict] = []
