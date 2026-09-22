@@ -160,7 +160,12 @@ g3.metric("Size of move vs history", f"{fs['pctile']:.0%}",
 g4.metric("Position now", f"{fs['position'] * 100:+.0f}%")
 
 ft = T.flow_table(agg)
-px_w = idx.reindex(ft.index, method="ffill")
+# The model runs on the roll-adjusted index (no roll jumps); the chart shows the front-month
+# close, which is the number a trader actually quotes.
+_c = D["cont"]
+front = _c[_c.symbol == sym].set_index(pd.DatetimeIndex(_c[_c.symbol == sym].trade_date)
+                                       .as_unit("ns"))["close_1"].sort_index()
+px_w = front.reindex(ft.index, method="ffill")
 st.plotly_chart(P.price_position_flow(px_w, ft.position, ft.flow, cls,
                                       f"{sym} — price, modelled position and implied flow",
                                       price_label=f"{sym} front month", price_unit="R/t"),
