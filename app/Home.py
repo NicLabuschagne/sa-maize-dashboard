@@ -36,7 +36,7 @@ table.blot td {{ color:{INK}; font-size:15.5px; padding:14px; text-align:right;
                  white-space:nowrap; border-bottom:1px solid {LINE}; }}
 table.blot tr:hover td {{ background:rgba(255,255,255,.05); }}
 
-td.grp {{ background:{BAND}; color:{DIM}; font-size:10.5px; font-weight:700;
+td.grp {{ background:{BAND}; color:{DIM}; text-align:left; font-size:10.5px; font-weight:700;
           letter-spacing:.16em; text-transform:uppercase; padding:9px 14px;
           border-top:1px solid {LINE}; border-bottom:1px solid {LINE}; }}
 .sym {{ font-weight:700; }}
@@ -53,13 +53,24 @@ td.grp {{ background:{BAND}; color:{DIM}; font-size:10.5px; font-weight:700;
 
 sig_df = load_signals()
 bs = load_balance_sheet()
-rows = build_rows(sig_df)
-nxt, days = next_release(bs.vintage_date.unique())
-as_of = pd.Timestamp(sig_df.vintage_date.max())
-nxt_txt = f"{nxt:%d %b %Y}" if nxt is not None else "—"
+releases = sorted(pd.to_datetime(sig_df.vintage_date).unique())
 
-st.title("Maize Monitor")
-st.caption(f"South Africa · point-in-time supply & demand · latest release **{as_of:%d %b %Y}** · "
+head, pick = st.columns([3, 1])
+with head:
+    st.title("Maize Monitor")
+with pick:
+    as_of = st.selectbox("As of release", releases[::-1], index=0,
+                         format_func=lambda d: pd.Timestamp(d).strftime("%d %b %Y"),
+                         help="Replay the board as it stood at any past release. Every figure is "
+                              "point-in-time, so nothing published later leaks in.")
+
+as_of = pd.Timestamp(as_of)
+rows = build_rows(sig_df, as_of)
+nxt, days = next_release(bs[pd.to_datetime(bs.vintage_date) <= as_of].vintage_date.unique(), today=as_of)
+nxt_txt = f"{nxt:%d %b %Y}" if nxt is not None else "—"
+live = as_of == pd.Timestamp(max(releases))
+st.caption(f"South Africa · point-in-time supply & demand · "
+           f"{'latest release' if live else 'replayed at release'} **{as_of:%d %b %Y}** · "
            f"next release **{nxt_txt}**{f' (in {days} days)' if days is not None else ''} · "
            f"{len(rows)} markets")
 

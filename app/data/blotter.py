@@ -58,10 +58,13 @@ def next_release(vintages: pd.Series, today: pd.Timestamp | None = None) -> tupl
     return None, None
 
 
-def build_rows(signals: pd.DataFrame) -> list[Row]:
+def build_rows(signals: pd.DataFrame, as_of: pd.Timestamp | None = None) -> list[Row]:
+    """Latest line per market, or the line as it stood at `as_of` (inclusive)."""
     rows: list[Row] = []
     for group, model, cls, sym, desc, unit in MARKETS:
         d = signals[(signals.model == model) & (signals.grain_class == cls)]
+        if as_of is not None:
+            d = d[pd.to_datetime(d.vintage_date) <= pd.Timestamp(as_of)]
         d = d.dropna(subset=["actual"]).sort_values("vintage_date")
         if d.empty:
             rows.append(Row(group, sym, desc, unit, None, None, None, False, None, None, None))
