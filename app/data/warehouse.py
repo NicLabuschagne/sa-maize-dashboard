@@ -30,3 +30,8 @@ def load_balance_sheet() -> pd.DataFrame:
 @st.cache_data
 def load_ingest_log() -> pd.DataFrame:
     return _query("SELECT * FROM ingest_log ORDER BY file")
+
+
+@st.cache_data
+def load_macro() -> pd.DataFrame:
+    return _query("SELECT * FROM macro ORDER BY series, date")
