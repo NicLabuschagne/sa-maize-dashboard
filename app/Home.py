@@ -36,7 +36,7 @@ table.blot td {{ color:{INK}; font-size:15.5px; padding:14px; text-align:right;
                  white-space:nowrap; border-bottom:1px solid {LINE}; }}
 table.blot tr:hover td {{ background:rgba(255,255,255,.05); }}
 
-td.grp {{ background:{BAND}; color:{DIM}; text-align:left; font-size:10.5px; font-weight:700;
+table.blot td.grp {{ background:{BAND}; color:{DIM}; text-align:left; font-size:10.5px; font-weight:700;
           letter-spacing:.16em; text-transform:uppercase; padding:9px 14px;
           border-top:1px solid {LINE}; border-bottom:1px solid {LINE}; }}
 .sym {{ font-weight:700; }}

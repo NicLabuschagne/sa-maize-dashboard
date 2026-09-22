@@ -88,3 +88,48 @@ def build_mask(p: pd.DataFrame, event: str, threshold: float, direction: str, mo
     if months:
         m &= p["my_month"].isin(months)
     return m & s.notna()
+
+
+def seasonal_surprise(p: pd.DataFrame, col: str = "months_cover", min_prior: int = 4) -> pd.Series:
+    """Divergence of a series from what is normal for that point in the marketing year.
+
+    log(value) minus the mean of log(value) at the same marketing-year month in *prior* seasons
+    only, so it is point-in-time. This is the closest stand-in the warehouse supports for the
+    "my balance sheet vs the official estimate" state: it measures how far the published figure
+    sits from its own seasonal expectation, rather than how the price is valued.
+    """
+    out = np.full(len(p), np.nan)
+    vals, mm = np.log(p[col].to_numpy(dtype=float)), p["my_month"].to_numpy()
+    for i in range(len(p)):
+        prior = vals[:i][mm[:i] == mm[i]]
+        prior = prior[np.isfinite(prior)]
+        if len(prior) >= min_prior and np.isfinite(vals[i]):
+            out[i] = vals[i] - prior.mean()
+    return pd.Series(out, index=p.index, name=f"{col}_surprise")
+
+
+COLUMNS = {
+    "z": ("Fair-value z — price vs stocks (model A)", "valuation"),
+    "spread_z": ("Calendar-spread z (model B)", "valuation"),
+    "basis_z": ("Parity-basis z (model D)", "valuation"),
+    "months_cover_pct_same_month": ("Cover percentile vs prior seasons, same month", "divergence"),
+    "months_cover_yoy": ("Cover, log change vs same month last season", "divergence"),
+    "months_cover_surprise": ("Cover surprise vs seasonal norm", "divergence"),
+}
+
+
+def build_mask_multi(p: pd.DataFrame, conditions: list[tuple[str, str, float]],
+                     months: list[int] | None = None) -> pd.Series:
+    """AND together several (column, direction, threshold) conditions.
+
+    A compound state - "rich on stocks AND the balance sheet is tighter than its seasonal norm" -
+    is a different and far more specific trade than either leg alone.
+    """
+    m = pd.Series(True, index=p.index)
+    for col, direction, thr in conditions:
+        s = p[col]
+        m &= (s >= thr) if direction == "high" else (s <= thr)
+        m &= s.notna()
+    if months:
+        m &= p["my_month"].isin(months)
+    return m

@@ -42,3 +42,27 @@ def test_home_blotter_lists_every_market() -> None:
         assert symbol in html, f"missing market row: {symbol}"
     for group in {m[0] for m in MARKETS}:
         assert group in html, f"missing group band: {group}"
+
+
+def test_home_replays_point_in_time_and_shades_signals() -> None:
+    """At the 2016 drought the board must show shaded SELL signals, not the neutral present."""
+    if not DB_PATH.exists():
+        pytest.skip("warehouse not built")
+    import re
+
+    import pandas as pd
+
+    at = AppTest.from_file(str(ROOT / "app" / "Home.py"), default_timeout=180).run()
+    target = next(o for o in at.selectbox[0].options
+                  if pd.Timestamp(o).strftime("%Y-%m") == "2016-07")
+    at.selectbox[0].set_value(target).run()
+    assert not at.exception
+
+    html = " ".join(m.body for m in at.markdown)
+    assert html.count(">SELL<") >= 3, "expected several rich signals during the drought"
+    alphas = {float(a) for r, g, b, a in re.findall(r"rgba\((\d+),(\d+),(\d+),([\d.]+)\)", html)
+              if (r, g, b) == ("255", "92", "92") and float(a) < 0.55}
+    assert len(alphas) > 1, "shading should vary with severity, not be a single flat tone"
+
+    caption = " ".join(c.value for c in at.caption)
+    assert "replayed at release" in caption and "26 Jul 2016" in caption
