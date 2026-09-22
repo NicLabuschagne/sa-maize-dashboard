@@ -190,3 +190,121 @@ def dynamics(px: pd.Series) -> dict:
         "trend_sharpe_gross": float(pnl.mean() / pnl.std() * np.sqrt(252)) if pnl.std() else np.nan,
         "years": float(years),
     }
+
+
+# ----------------------------------------------------------------------------- flow
+FLOW_WINDOW = 5          # trading days: one week of implied buying or selling
+
+
+def flow(agg: pd.Series, window: int = FLOW_WINDOW) -> pd.Series:
+    """Change in the modelled position - what a trend follower would have had to trade.
+
+    Position is the stock, flow is the flow. A market moves on the buying and selling, so this
+    is the series to put under a price chart. Units are position points: +0.20 means the model
+    added a fifth of a full-size position over the window.
+    """
+    return (agg - agg.shift(window)).rename("flow")
+
+
+def flow_table(agg: pd.Series, window: int = FLOW_WINDOW) -> pd.DataFrame:
+    """Position and flow together, weekly, for plotting under a price series."""
+    f = flow(agg, window)
+    out = pd.DataFrame({"position": agg, "flow": f}).dropna()
+    return out.resample("W-FRI").last().dropna()
+
+
+def flow_state(agg: pd.Series, window: int = FLOW_WINDOW) -> dict:
+    """Current position and flow, with the flow percentile against its own history."""
+    a = agg.dropna()
+    f = flow(a, window).dropna()
+    if f.empty:
+        return {}
+    cur = float(f.iloc[-1])
+    return {
+        "position": float(a.iloc[-1]),
+        "flow": cur,
+        "direction": "buying" if cur > 0.02 else "selling" if cur < -0.02 else "flat",
+        "pctile": float((f.abs() <= abs(cur)).mean()),
+        "flow_1m": float((a.iloc[-1] - a.iloc[-22]) if len(a) > 22 else np.nan),
+        "as_of": a.index[-1],
+    }
+
+
+# ----------------------------------------------------------------------------- anchored nowcast
+def anchored_nowcast(agg: pd.Series, cot: pd.DataFrame, col: str = "net_noncomm_pct_oi",
+                     scale: float | None = None) -> pd.DataFrame:
+    """Daily positioning estimate: the last *published* COT level plus model flow since.
+
+    The report gives a level as of Tuesday but is only public on Friday, so between releases the
+    official number is stale by three to eight days. Anchoring on the last print and adding the
+    model's implied flow since keeps the level honest while updating every day - and it is strictly
+    point-in-time, because the anchor only changes once `release_date` has passed.
+
+    Returns a daily frame with the anchor, the pure-model path, and the anchored nowcast.
+    """
+    c = cot.dropna(subset=[col]).copy()
+    for k in ("date", "release_date"):
+        if k in c:
+            c[k] = pd.to_datetime(c[k]).astype("datetime64[ns]")
+    # CFTC publishes Tuesday's positions on the Friday. A few rows carry no release date;
+    # assume the standard three-day lag rather than discarding them.
+    if "release_date" not in c:
+        c["release_date"] = pd.NaT
+    c["release_date"] = c["release_date"].fillna(c["date"] + pd.Timedelta(days=3))
+    c = c.sort_values("release_date")
+
+    a = agg.dropna()
+    a.index = pd.DatetimeIndex(a.index).as_unit("ns")
+    if scale is None:                                    # map model units onto COT units
+        scale = float(c[col].std() / a.std()) if a.std() else 1.0
+
+    # model position at each COT measurement date (the Tuesday the level refers to)
+    at_meas = pd.merge_asof(c[["date", "release_date", col]].sort_values("date"),
+                            pd.DataFrame({"d": a.index, "m": a.to_numpy()}).sort_values("d"),
+                            left_on="date", right_on="d", direction="backward",
+                            tolerance=pd.Timedelta("5D")).dropna(subset=["m"])
+
+    # for each day, the most recent report that had actually been released
+    daily = pd.DataFrame({"date": a.index, "model": a.to_numpy()})
+    j = pd.merge_asof(daily.sort_values("date"),
+                      at_meas.rename(columns={"date": "anchor_date", col: "anchor_level",
+                                              "m": "anchor_model"}).sort_values("release_date"),
+                      left_on="date", right_on="release_date", direction="backward")
+    j["nowcast"] = j["anchor_level"] + scale * (j["model"] - j["anchor_model"])
+    j["model_only"] = scale * j["model"]
+    j["days_since_report"] = (j["date"] - j["anchor_date"]).dt.days
+    return j.set_index("date")[["model", "model_only", "anchor_level", "anchor_date",
+                                "days_since_report", "nowcast"]]
+
+
+def nowcast_scorecard(nowcast: pd.DataFrame, cot: pd.DataFrame,
+                      col: str = "net_noncomm_pct_oi") -> dict:
+    """Every Friday the report lands and grades the week's nowcast. This is that scorecard.
+
+    Compares the nowcast standing just before a release against the level that release reported,
+    and does the same for the pure-model path, so the value of anchoring is visible.
+    """
+    c = cot.dropna(subset=[col]).copy()
+    for k in ("date", "release_date"):
+        if k in c:
+            c[k] = pd.to_datetime(c[k]).astype("datetime64[ns]")
+    if "release_date" not in c:
+        c["release_date"] = pd.NaT
+    c["release_date"] = c["release_date"].fillna(c["date"] + pd.Timedelta(days=3))
+    n = nowcast.reset_index()
+    # the estimate standing on the measurement date, before that report was public
+    j = pd.merge_asof(c.sort_values("date"), n.sort_values("date"), on="date",
+                      direction="backward", tolerance=pd.Timedelta("5D")).dropna(
+                          subset=["nowcast", col])
+    if len(j) < 30:
+        return {"ok": False, "n": len(j)}
+    err_a = (j["nowcast"] - j[col]).abs()
+    err_m = (j["model_only"] - j[col]).abs()
+    sd = float(j[col].std())
+    return {"ok": True, "n": int(len(j)),
+            "mae_anchored": float(err_a.mean()), "mae_model_only": float(err_m.mean()),
+            "mae_anchored_sd": float(err_a.mean() / sd), "mae_model_only_sd": float(err_m.mean() / sd),
+            "corr_anchored": float(j["nowcast"].corr(j[col])),
+            "corr_model_only": float(j["model_only"].corr(j[col])),
+            "improvement": float(1 - err_a.mean() / err_m.mean()),
+            "errors": j[["date", col, "nowcast", "model_only"]]}

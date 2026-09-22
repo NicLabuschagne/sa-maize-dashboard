@@ -67,6 +67,7 @@ def corn_validation() -> dict:
                           tolerance=pd.Timedelta("5D")).dropna(subset=["v"])
         per[col] = j["v"].corr(j.net_noncomm_pct_oi)
     out["per_signal"] = per
+    out["price"] = px
     return out
 
 
@@ -78,6 +79,18 @@ def price_benchmark() -> dict:
         return {}
     px = pd.Series(m.value.to_numpy(), index=pd.DatetimeIndex(m.date).as_unit("ns"))
     return T.price_benchmark(px, T.load_cot("ZC"))
+
+
+@st.cache_data
+def nowcast() -> dict:
+    V_ = corn_validation()
+    px = V_.get("price")
+    if px is None:
+        return {}
+    agg_ = T.aggregate(T.trend_panel(px))
+    cot = T.load_cot("ZC")
+    nc = T.anchored_nowcast(agg_, cot)
+    return {"nc": nc, "score": T.nowcast_scorecard(nc, cot)}
 
 
 @st.cache_data
@@ -135,6 +148,24 @@ with c2:
     fig.update_yaxes(range=[-1.05, 1.05], tickformat="+.1f")
     st.plotly_chart(fig, width="stretch")
 
+st.markdown("##### Position is the stock — flow is what actually gets traded")
+fs = T.flow_state(agg)
+g1, g2, g3, g4 = st.columns(4)
+g1.metric("Implied flow, 1 week", f"{fs['flow'] * 100:+.0f}pp", fs["direction"], delta_color="off",
+          help="Change in the modelled position over five sessions, in points of a full-size "
+               "position. This is what a trend follower would have had to buy or sell.")
+g2.metric("Implied flow, 1 month", f"{fs['flow_1m'] * 100:+.0f}pp")
+g3.metric("Size of move vs history", f"{fs['pctile']:.0%}",
+          help="Percentile of this week's absolute flow against every week in the sample.")
+g4.metric("Position now", f"{fs['position'] * 100:+.0f}%")
+
+ft = T.flow_table(agg)
+px_w = idx.reindex(ft.index, method="ffill")
+st.plotly_chart(P.price_position_flow(px_w, ft.position, ft.flow, cls,
+                                      f"{sym} — price, modelled position and implied flow",
+                                      price_label=f"{sym} front month", price_unit="R/t"),
+                width="stretch")
+
 # ---------------------------------------------------------------- 2. validation on corn
 st.markdown("---")
 st.markdown("#### Does the method recover real positioning? Validated on CBOT corn")
@@ -172,6 +203,18 @@ else:
                    "money in corn is slow, which is what capacity constraints would predict. The "
                    "blend is kept equal-weight rather than tuned to this, so the port to SAFEX is "
                    "not fitted to corn.")
+
+    cpx = V.get("price")
+    if cpx is not None:
+        cagg = T.aggregate(T.trend_panel(cpx))
+        cft = T.flow_table(cagg)
+        st.plotly_chart(P.price_position_flow(cpx.reindex(cft.index, method="ffill"),
+                                              cft.position, cft.flow, "aux",
+                                              "CBOT corn — price, modelled position and implied flow",
+                                              price_label="CBOT corn front", price_unit="$/bu"),
+                        width="stretch")
+        st.caption("Same three panels as SAFEX above, but here the middle panel can be checked "
+                   "against the CFTC report — which is what the correlations above measure.")
 
     B = price_benchmark()
     if B.get("ok"):
@@ -264,6 +307,52 @@ that is the first thing to do with desk data.
 *would* hold, useful for asking whether your fundamental view is aligned with or against systematic
 momentum. That is a legitimate risk overlay. It is not a flow forecast.
 """)
+
+st.markdown("##### The practical loop: nowcast daily, reconcile when the report lands")
+N = nowcast()
+if N and N.get("score", {}).get("ok"):
+    sc, nc = N["score"], N["nc"]
+    st.caption("The report gives a level as of Tuesday but is only public on Friday, so the official "
+               "number is three to eight days stale at all times. Anchoring on the last *published* "
+               "print and adding the model's implied flow since updates it daily without inventing "
+               "the level — and it stays point-in-time, because the anchor only moves once the "
+               "release date has passed.")
+    n1, n2, n3, n4 = st.columns(4)
+    n1.metric("Anchored nowcast error", f"{sc['mae_anchored_sd']:.2f} sd",
+              f"MAE {sc['mae_anchored']:.3f} of OI", delta_color="off",
+              help="Mean absolute error against the level the next report actually published, "
+                   "in standard deviations of reported positioning.")
+    n2.metric("Model-only error", f"{sc['mae_model_only_sd']:.2f} sd",
+              f"MAE {sc['mae_model_only']:.3f}", delta_color="off")
+    n3.metric("Improvement from anchoring", f"{sc['improvement']:.0%}")
+    n4.metric("Correlation with the print", f"{sc['corr_anchored']:+.3f}",
+              f"model only {sc['corr_model_only']:+.3f}")
+
+    e = sc["errors"]
+    fig = go.Figure()
+    P.line(fig, e.date, e.net_noncomm_pct_oi * 100, "reported (CFTC)", entity="yellow",
+           hover="%{y:+.1f}%<extra>reported</extra>")
+    P.line(fig, e.date, e.nowcast * 100, "anchored nowcast", entity="white",
+           hover="%{y:+.1f}%<extra>anchored</extra>")
+    P.line(fig, e.date, e.model_only * 100, "model only", entity="aux2", width=1.2,
+           hover="%{y:+.1f}%<extra>model only</extra>")
+    fig.add_hline(y=0, line=dict(color=P.muted(), width=1))
+    P.layout(fig, "CBOT corn: what the model said on the Tuesday, against what the report published",
+             ytitle="net non-commercial, % of open interest", height=360)
+    st.plotly_chart(fig, width="stretch")
+
+    st.success(
+        f"**Anchoring cuts the error by {sc['improvement']:.0%}.** Run daily and reconciled every "
+        f"Friday, the estimate lands within **{sc['mae_anchored_sd']:.2f} standard deviations** of "
+        f"the eventual print. The model alone manages {sc['mae_model_only_sd']:.2f} sd. So the "
+        f"sensible operating loop is exactly that: the model carries the estimate between reports, "
+        f"and each release both corrects the level and scores the week.", icon="✅")
+    st.warning(
+        f"**And this is the error bar for SAFEX.** There is no report to anchor to, so the SAFEX "
+        f"reading is permanently in model-only mode — the {sc['mae_model_only_sd']:.2f} sd column, "
+        f"not the {sc['mae_anchored_sd']:.2f} sd one. Treat the level as indicative and the "
+        f"*direction of flow* as the usable part. Broker-code data would supply the missing anchor.",
+        icon="⚠️")
 
 st.markdown("##### Do the price dynamics port, even if the flows cannot be seen?")
 st.caption("If SAFEX price behaved nothing like CBOT, a trend model would mean something different "

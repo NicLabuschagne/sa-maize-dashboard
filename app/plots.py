@@ -91,3 +91,49 @@ def add_vlines(fig: go.Figure, dates: pd.Series, label: str = "", xmax: pd.Times
         fig.add_annotation(x=dates.iloc[-1], y=1, yref="paper", text=label, showarrow=False,
                            font=dict(size=10, color=muted()), xanchor="left")
     return fig
+
+
+def price_position_flow(px: pd.Series, position: pd.Series, flow_: pd.Series, entity: str,
+                        title: str, price_label: str = "price", price_unit: str = "",
+                        height: int = 560) -> go.Figure:
+    """Three stacked panels on a shared time axis: price, modelled position, implied flow.
+
+    The flow panel is the one that matters - position is the stock a trend follower holds,
+    flow is what they had to buy or sell to get there, and only the flow moves a market.
+    """
+    from plotly.subplots import make_subplots
+
+    d = _dark()
+    fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05,
+                        row_heights=[0.44, 0.28, 0.28],
+                        subplot_titles=(price_label, "modelled position (−100% short … +100% long)",
+                                        "implied flow — buying (green) / selling (red)"))
+    fig.add_trace(go.Scatter(x=px.index, y=px, name=price_label, mode="lines",
+                             line=dict(color=color(entity), width=2),
+                             hovertemplate="%{y:,.0f} " + price_unit + "<extra></extra>"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=position.index, y=position * 100, name="position", mode="lines",
+                             line=dict(color=STATUS["navy"], width=1.5), fill="tozeroy",
+                             fillcolor="rgba(0,32,77,0.16)",
+                             hovertemplate="%{y:+.0f}%<extra>position</extra>"), row=2, col=1)
+    cols = [STATUS["good"] if v >= 0 else STATUS["bad"] for v in flow_]
+    fig.add_trace(go.Bar(x=flow_.index, y=flow_ * 100, name="flow", marker=dict(color=cols),
+                         hovertemplate="%{y:+.1f}pp<extra>flow</extra>"), row=3, col=1)
+    for r in (2, 3):
+        fig.add_hline(y=0, line=dict(color=muted(), width=1), row=r, col=1)
+
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=15, color=_TEXT[d]), x=0, xanchor="left",
+                   y=1.0, yanchor="top", pad=dict(t=6)),
+        height=height, margin=dict(l=16, r=16, t=86, b=16), showlegend=False,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=_TEXT2[d], size=12), hovermode="x unified", bargap=0.1)
+    for ann in fig.layout.annotations:
+        ann.font = dict(size=11, color=_TEXT2[d])
+        ann.x, ann.xanchor = 0, "left"
+    grid = dict(gridcolor=_GRID[d], gridwidth=1, zeroline=False)
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(**grid)
+    fig.update_yaxes(tickformat=",", row=1, col=1)
+    fig.update_yaxes(tickformat="+.0f", ticksuffix="%", range=[-105, 105], row=2, col=1)
+    fig.update_yaxes(tickformat="+.0f", ticksuffix="pp", row=3, col=1)
+    return fig

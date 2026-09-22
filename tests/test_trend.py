@@ -137,3 +137,78 @@ def test_dynamics_sees_a_trending_market_as_more_persistent() -> None:
     choppy = T.dynamics(_series(n=1600, drift=0.0, seed=6))
     assert trending["flips_per_year"] < choppy["flips_per_year"]
     assert trending["mean_abs_trend"] > choppy["mean_abs_trend"]
+
+
+def _cot_from(agg: pd.Series, scale: float = 0.3, noise: float = 0.0, seed: int = 0) -> pd.DataFrame:
+    """Weekly Tuesday report built from a model path, released three days later."""
+    rng = np.random.default_rng(seed)
+    w = agg.dropna().resample("W-TUE").last().dropna()
+    v = scale * w.to_numpy() + rng.normal(0, noise, len(w))
+    return pd.DataFrame({"date": w.index, "release_date": w.index + pd.Timedelta(days=3),
+                         "net_noncomm_pct_oi": v})
+
+
+def test_flow_is_the_change_in_position() -> None:
+    agg = T.aggregate(T.trend_panel(_series(n=600)))
+    f = T.flow(agg, window=5).dropna()
+    assert np.allclose(f, (agg - agg.shift(5)).dropna())
+
+
+def test_flow_state_reports_direction() -> None:
+    idx = pd.DatetimeIndex(pd.bdate_range("2020-01-01", periods=60)).as_unit("ns")
+    rising = pd.Series(np.linspace(-0.8, 0.8, 60), index=idx)
+    falling = pd.Series(np.linspace(0.8, -0.8, 60), index=idx)
+    assert T.flow_state(rising)["direction"] == "buying"
+    assert T.flow_state(falling)["direction"] == "selling"
+    assert T.flow_state(pd.Series(np.zeros(60), index=idx))["direction"] == "flat"
+
+
+def test_anchoring_corrects_level_bias_the_model_cannot_see() -> None:
+    """Anchoring is a bias correction. Give reported positioning a slow drift the model has no
+    way to know about - as real positioning has - and the anchor must recover it."""
+    px = _series(n=1600, drift=0.0004, seed=31)
+    agg = T.aggregate(T.trend_panel(px))
+    cot = _cot_from(agg, noise=0.01, seed=1)
+    rng = np.random.default_rng(5)
+    bias = np.cumsum(rng.normal(0, 0.012, len(cot)))        # slow wander, invisible to the model
+    cot["net_noncomm_pct_oi"] = cot["net_noncomm_pct_oi"] + bias
+    sc = T.nowcast_scorecard(T.anchored_nowcast(agg, cot), cot)
+    assert sc["ok"]
+    assert sc["mae_anchored"] < sc["mae_model_only"]
+    assert sc["improvement"] > 0.2
+
+
+def test_anchoring_adds_noise_when_the_model_is_already_unbiased() -> None:
+    """The mirror case, documenting the mechanism: with no bias to correct, anchoring only
+    re-imports the previous report's measurement error."""
+    px = _series(n=1600, drift=0.0004, seed=31)
+    agg = T.aggregate(T.trend_panel(px))
+    cot = _cot_from(agg, noise=0.02, seed=1)                # pure function of the model, plus noise
+    sc = T.nowcast_scorecard(T.anchored_nowcast(agg, cot), cot)
+    assert sc["ok"] and sc["improvement"] < 0
+
+
+def test_anchor_only_uses_released_reports() -> None:
+    """The anchor must not update before the release date - that would be look-ahead."""
+    px = _series(n=1200, seed=17)
+    agg = T.aggregate(T.trend_panel(px))
+    cot = _cot_from(agg, seed=2)
+    nc = T.anchored_nowcast(agg, cot).dropna(subset=["anchor_date"])
+    assert (nc.index >= nc.anchor_date).all()
+    assert nc.days_since_report.min() >= 3          # never fresher than the publication lag
+
+
+def test_nowcast_handles_missing_release_dates() -> None:
+    px = _series(n=1200, seed=19)
+    agg = T.aggregate(T.trend_panel(px))
+    cot = _cot_from(agg, seed=3)
+    cot.loc[cot.index[:20], "release_date"] = pd.NaT
+    nc = T.anchored_nowcast(agg, cot)
+    assert nc.nowcast.notna().sum() > 500
+
+
+def test_nowcast_scorecard_needs_a_sample() -> None:
+    px = _series(n=400, seed=23)
+    agg = T.aggregate(T.trend_panel(px))
+    cot = _cot_from(agg, seed=4).head(10)
+    assert T.nowcast_scorecard(T.anchored_nowcast(agg, cot), cot)["ok"] is False

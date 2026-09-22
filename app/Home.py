@@ -6,8 +6,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pandas as pd
 import streamlit as st
 
-from app.data.blotter import MARKETS, build_rows, next_release, signal
+from app.data import fairvalue as FV
+from app.data import trend as TR
+from app.data.blotter import MARKETS, ROW_SYMBOL, build_rows, next_release, signal
 from app.data.warehouse import load_balance_sheet, load_signals
+from app.state import derived
 from config import APP_TITLE
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
@@ -51,8 +54,21 @@ table.blot td.grp {{ background:{BAND}; color:{DIM}; text-align:left; font-size:
 </style>
 """, unsafe_allow_html=True)
 
+@st.cache_data
+def flow_by_symbol() -> dict:
+    """One-week implied trend flow per outright market, for the Flow column."""
+    out = {}
+    for s_ in ("WMAZ", "YMAZ"):
+        agg = TR.aggregate(TR.trend_panel(FV.roll_adjusted_index(derived()["cont"], s_)))
+        st_ = TR.flow_state(agg)
+        if st_:
+            out[s_] = st_
+    return out
+
+
 sig_df = load_signals()
 bs = load_balance_sheet()
+flows = flow_by_symbol()
 releases = sorted(pd.to_datetime(sig_df.vintage_date).unique())
 
 head, pick = st.columns([3, 1])
@@ -74,6 +90,22 @@ st.caption(f"South Africa · point-in-time supply & demand · "
            f"next release **{nxt_txt}**{f' (in {days} days)' if days is not None else ''} · "
            f"{len(rows)} markets")
 
+BUY, SELL = "#2FCF87", "#FF5C5C"
+
+
+def flow_cell(symbol: str | None) -> str:
+    """One-week implied trend flow: what systematic momentum has been buying or selling."""
+    st_ = flows.get(symbol or "")
+    if not st_:
+        return "<span class='flat'>—</span>"
+    f = st_["flow"] * 100
+    if abs(f) < 2:
+        return f"<span class='flat'>{f:+.0f}pp</span>"
+    colour = BUY if f > 0 else SELL
+    return (f"<span style='color:{colour};font-weight:600'>{f:+.0f}pp</span>"
+            f"<span class='unit'>{'buy' if f > 0 else 'sell'}</span>")
+
+
 html = ["<table class='blot'><tr>"
         "<th class='l'>Symbol</th><th>Market</th><th>Fair value</th><th>Deviation</th>"
         "<th>Signal (&sigma;)</th><th>Next release</th><th>Cover</th></tr>"]
@@ -82,7 +114,7 @@ current_group = None
 for r in rows:
     if r.group != current_group:
         current_group = r.group
-        html.append(f"<tr><td class='grp' colspan='7'>{r.group}</td></tr>")
+        html.append(f"<tr><td class='grp' colspan='8'>{r.group}</td></tr>")
 
     money = r.unit == "R/t"
     market = ("—" if r.market is None else f"{r.market:,.0f}" if money else f"{r.market:+.1f}")
@@ -107,6 +139,7 @@ for r in rows:
         f"<td>{market}<span class='unit'>{r.unit}</span></td>"
         f"<td>{fair}<span class='unit'>{r.unit}</span></td>"
         f"<td>{dev_html}</td><td>{pill}</td>"
+        f"<td>{flow_cell(ROW_SYMBOL.get(r.group))}</td>"
         f"<td>{nxt:%d %b}</td>"
         f"<td>{cover}<span class='unit'>mo</span></td></tr>")
 

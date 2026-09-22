@@ -25,6 +25,10 @@ MARKETS: list[tuple[str, str, str, str, str, str]] = [
     ("Cross", "C", "white_vs_yellow", "WMAZ-YMAZ", "White premium over yellow", "% of yellow"),
 ]
 
+# Flow is a property of the outright market, so every row in a group inherits its symbol's
+# trend model. The cross-market row has no single underlying and shows nothing.
+ROW_SYMBOL = {"White maize": "WMAZ", "Yellow maize": "YMAZ", "Cross": None}
+
 
 @dataclass
 class Row:
