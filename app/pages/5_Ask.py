@@ -69,10 +69,11 @@ def render_badge(a: C.Answer) -> None:
     if a.demo:
         st.info("**Demo mode** — canned query, no model call.", icon="🧪")
         return
+    cost = f"  ·  ${a.cost_usd:.3f}" if a.usage else ""
     if a.data_backed:
         tables = ", ".join(a.tables_used) or "warehouse"
         n_ok = sum(1 for q in a.queries if q.get("ok"))
-        st.success(f"**From your data** — {n_ok} quer{'y' if n_ok == 1 else 'ies'} against `{tables}`.",
+        st.success(f"**From your data** — {n_ok} quer{'y' if n_ok == 1 else 'ies'} against `{tables}`.{cost}",
                    icon="✅")
     else:
         st.warning("**Not from your data** — no query ran for this answer, so nothing here is backed "

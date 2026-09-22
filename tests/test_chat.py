@@ -119,3 +119,11 @@ def test_key_looks_valid_catches_the_key_id_paste_error(key, ok: bool) -> None:
 def test_key_id_reason_is_explanatory() -> None:
     _, why = C.key_looks_valid("apikey_0123")
     assert "key ID" in why and "sk-ant-api03-" in why
+
+
+def test_cost_model_prices_cache_reads_cheaply() -> None:
+    """A cached repeat must cost far less than the first call that wrote the cache."""
+    first = C.Answer(text="x", usage=[{"in": 300, "out": 600, "cache_write": 3000, "cache_read": 0}])
+    repeat = C.Answer(text="x", usage=[{"in": 300, "out": 600, "cache_write": 0, "cache_read": 3000}])
+    assert repeat.cost_usd < first.cost_usd
+    assert C.Answer(text="x").cost_usd == 0.0

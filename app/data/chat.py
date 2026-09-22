@@ -187,6 +187,15 @@ class Answer:
     error: str | None = None
     demo: bool = False
     stop_reason: str | None = None
+    usage: list[dict] = field(default_factory=list)
+
+    @property
+    def cost_usd(self) -> float:
+        """Opus 5 list pricing: $5/MTok in, $25/MTok out; cache writes 1.25x, reads 0.1x."""
+        c = 0.0
+        for u in self.usage:
+            c += (u["in"] * 5 + u["cache_write"] * 6.25 + u["cache_read"] * 0.5 + u["out"] * 25) / 1e6
+        return c
 
     @property
     def data_backed(self) -> bool:
@@ -256,8 +265,12 @@ def ask(history: list[dict], data_only: bool = True, db_path=DB_PATH) -> Answer:
         default_headers={"anthropic-workspace-id": ws} if ws else None,
     )
     messages: list[dict] = [{"role": m["role"], "content": m["content"]} for m in history]
-    system = _system_prompt(schema_text(db_path), data_only)
+    # The schema prompt is byte-identical on every call and every turn, so cache it:
+    # ~90% cheaper and faster on each repeat within the cache TTL.
+    system = [{"type": "text", "text": _system_prompt(schema_text(db_path), data_only),
+               "cache_control": {"type": "ephemeral"}}]
     queries: list[dict] = []
+    usage: list[dict] = []
 
     try:
         for _ in range(MAX_ROUNDS):
@@ -265,13 +278,16 @@ def ask(history: list[dict], data_only: bool = True, db_path=DB_PATH) -> Answer:
                 model=MODEL, max_tokens=MAX_TOKENS, system=system,
                 thinking={"type": "adaptive"}, tools=[TOOL], messages=messages,
             )
+            usage.append({"in": resp.usage.input_tokens, "out": resp.usage.output_tokens,
+                          "cache_write": getattr(resp.usage, "cache_creation_input_tokens", 0) or 0,
+                          "cache_read": getattr(resp.usage, "cache_read_input_tokens", 0) or 0})
             if resp.stop_reason == "refusal":
                 return Answer(text="", queries=queries, stop_reason="refusal",
                               error="The model declined this request.")
             messages.append({"role": "assistant", "content": resp.content})
             if resp.stop_reason != "tool_use":
                 text = "\n".join(b.text for b in resp.content if b.type == "text").strip()
-                return Answer(text=text, queries=queries, stop_reason=resp.stop_reason)
+                return Answer(text=text, queries=queries, stop_reason=resp.stop_reason, usage=usage)
 
             results = []
             for block in resp.content:
