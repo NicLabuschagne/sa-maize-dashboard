@@ -86,5 +86,6 @@ def run_models(grain_class: str) -> dict:
         fw_base, fw_world = FV.fit_expanding(paw), FV.fit_expanding(paw, extra=["lw"])
         out["A_world"] = {"base": fw_base, "with_world": fw_world,
                           "ic_base": FV.ic_table(fw_base.panel, {"cover only": "z"}),
-                          "ic_world": FV.ic_table(fw_world.panel, {"cover + world price": "z"})}
+                          "ic_world": FV.ic_table(fw_world.panel, {"cover + world price": "z"}),
+                          "decomp": FV.decompose_world_r2(paw, snap)}
     return out

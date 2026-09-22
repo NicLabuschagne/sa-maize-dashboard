@@ -316,3 +316,42 @@ def panel_price_with_world(sd: pd.DataFrame, cont: pd.DataFrame, snap: pd.DataFr
     p = p.dropna(subset=["world_rand", "y"]).reset_index(drop=True)
     p["lw"] = np.log(p["world_rand"] * (p["real_px"] / p["close_1"]))   # same CPI deflator as y
     return p
+
+
+def decompose_world_r2(paw: pd.DataFrame, snap: pd.DataFrame) -> dict:
+    """Where does the R² gain from the world-parity term actually come from?
+
+    World parity is CBOT corn x USD/ZAR. Both SAFEX and parity are quoted in rand, so a large part
+    of any common variation is the currency, not the grain. This splits the two legs and also
+    reports the nominal specification, where the shared inflation trend is still present.
+    """
+    w = snap.pivot(index="date", columns="series", values="value").sort_index().reset_index()
+    w["date"] = w["date"].astype("datetime64[ns]")
+    p = pd.merge_asof(paw.sort_values("trade_date"), w, left_on="trade_date", right_on="date",
+                      direction="backward", tolerance=pd.Timedelta("5D"))
+    p = p.dropna(subset=["y", "x", "lw", "cbot_corn_safexclose", "usdzar_safexclose"]).reset_index(drop=True)
+    if len(p) < 50:
+        return {}
+
+    def r2(cols: list[np.ndarray], target: np.ndarray) -> float:
+        X = np.column_stack(cols)
+        beta, _ = _ols(X, target)
+        r = target - X @ beta
+        return float(1 - (r @ r) / ((target - target.mean()) ** 2).sum())
+
+    y_real = p["y"].to_numpy()
+    y_nom = np.log(p["close_1"].to_numpy())
+    lw_nom = np.log(p["world_rand"].to_numpy())
+    lc, lf = np.log(p["cbot_corn_safexclose"].to_numpy()), np.log(p["usdzar_safexclose"].to_numpy())
+    S, one = fourier(p["my_month"]), np.ones((len(p), 1))
+    x = p["x"].to_numpy()
+    return {
+        "n": len(p),
+        "real_base": r2([S, x], y_real), "real_world": r2([S, x, p["lw"].to_numpy()], y_real),
+        "nom_base": r2([S, x], y_nom), "nom_world": r2([S, x, lw_nom], y_nom),
+        "nom_zar_only": r2([one, lf], y_nom), "nom_cbot_only": r2([one, lc], y_nom),
+        "nom_both_free": r2([one, lc, lf], y_nom),
+        "real_world_only": r2([one, p["lw"].to_numpy()], y_real),
+        "sd_log_cbot": float(lc.std()), "sd_log_zar": float(lf.std()),
+        "corr_cbot_zar": float(np.corrcoef(lc, lf)[0, 1]),
+    }

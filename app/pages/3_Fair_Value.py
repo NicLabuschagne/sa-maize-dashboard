@@ -181,16 +181,51 @@ def parity_block() -> None:
     b10 = aw["ic_base"].query("horizon == '10d'").IC.iloc[0]
     w10 = aw["ic_world"].query("horizon == '10d'").IC.iloc[0]
     st.markdown("##### Tested and rejected: adding the world price to the outright model (A)")
+    d = aw.get("decomp") or {}
     st.markdown(
         f"Putting log(real world parity) into Model A alongside cover raises R² from "
-        f"**{aw['base'].r2_full:.2f} to {aw['with_world'].r2_full:.2f}** with a coefficient of "
-        f"**{aw['with_world'].coef_full['lw']:+.2f}** (t = {aw['with_world'].tstat_full['lw']:.1f}) — a large gain in "
-        f"explanatory power. It buys **no** forecasting power: the 10-day IC goes from **{b10:+.2f} to {w10:+.2f}**, "
-        f"i.e. flat to worse depending on the class (the loss is clearer on yellow, where SAFEX tracks CBOT more "
-        f"closely). Controlling for a contemporaneous near-martingale changes what the residual measures — from "
-        f"*rich against a slow local fundamental*, which drifts back over about two weeks, to *out of line with "
-        f"CBOT×ZAR today*, which physical trade arbitrages. Fit and forecast are different objectives, and R² picked "
-        f"the wrong one. The world price is therefore kept out of Model A and used here, on the leg it actually prices.")
+        f"**{aw['base'].r2_full:.2f} to {aw['with_world'].r2_full:.2f}** (t = "
+        f"{aw['with_world'].tstat_full['lw']:.1f} on the world term) while the 10-day IC goes from "
+        f"**{b10:+.2f} to {w10:+.2f}** — no forecasting gain, and a loss on yellow. "
+        f"Before reading anything into that R², it is worth asking what the world term is actually measuring.")
+    if d:
+        dec = pd.DataFrame({
+            "R²": [d["nom_zar_only"], d["nom_cbot_only"], d["nom_both_free"], d["nom_base"], d["nom_world"],
+                   d["real_base"], d["real_world"]],
+        }, index=["nominal price ~ USD/ZAR alone", "nominal price ~ CBOT corn alone",
+                  "nominal price ~ CBOT + USD/ZAR (free weights)", "nominal price ~ cover + season",
+                  "nominal price ~ cover + season + world parity", "real price ~ cover + season (Model A)",
+                  "real price ~ cover + season + world parity"])
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            st.dataframe(dec.style.format("{:.3f}"), width="stretch")
+        with c2:
+            st.markdown(
+                f"**The world term is mostly the rand.** On nominal prices, USD/ZAR on its own explains "
+                f"**{d['nom_zar_only']:.0%}** of the variation in the {cls} front month; CBOT corn on its own explains "
+                f"**{d['nom_cbot_only']:.0%}**. A rand-denominated commodity price co-moving with the rand — which "
+                f"roughly halved over the sample (sd of log USD/ZAR {d['sd_log_zar']:.2f} vs log CBOT "
+                f"{d['sd_log_cbot']:.2f}) — is close to an accounting identity, not a finding about maize. "
+                f"Deflating both sides by CPI, as Model A does, strips the shared inflation trend and is why the "
+                f"real-terms gain ({d['real_base']:.2f} → {d['real_world']:.2f}) is much smaller than the nominal one "
+                f"({d['nom_base']:.2f} → {d['nom_world']:.2f}).")
+        st.markdown(
+            f"What *is* economically real in these numbers is the split between the two classes. Regressed on world "
+            f"parity alone in real terms, yellow gives R² **0.47** against white's **0.25**. Yellow maize is a feed "
+            f"grain and a direct substitute for imported corn, so it is tied to import parity; white maize is the "
+            f"human staple with no deep world market — it is a regional Southern African product priced off local "
+            f"stocks. The model reproducing that asymmetry unprompted is a good sign the data and joins are sound.")
+        st.warning(
+            "**Caveat on the t-statistics.** Both sides are near-unit-root price levels over 17 years, so the "
+            "t = 8–15 on the world term is a textbook spurious-regression artefact (Granger–Newbold) and should not "
+            "be read as inference. The IC tests above are immune to it — they are rank correlations against forward "
+            "returns with a block bootstrap — which is precisely why the signal question is settled on IC and not R².",
+            icon="⚠️")
+    st.markdown(
+        "So the world price is kept out of Model A. Controlling for a contemporaneous near-martingale changes what "
+        "the residual measures — from *rich against a slow local fundamental*, which drifts back over about two "
+        "weeks, to *out of line with CBOT×ZAR today*, which physical trade arbitrages. It is used here instead, on "
+        "the leg it genuinely prices: the basis.")
     st.caption("Timing robustness: repeating this with the previous CBOT settle instead of the 10:00 UTC print moves "
                "the 10-day IC by under 0.005 — the two world-price series correlate 0.9993 — so the conclusion does "
                "not rest on the snapshot convention. Getting the convention right still matters: the same-day CBOT "
