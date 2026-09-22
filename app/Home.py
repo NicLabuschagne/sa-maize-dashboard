@@ -3,103 +3,121 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import numpy as np
 import pandas as pd
 import streamlit as st
 
-from app.data.blotter import build_rows, next_release
+from app.data.blotter import MARKETS, build_rows, next_release, signal
 from app.data.warehouse import load_balance_sheet, load_signals
 from config import APP_TITLE
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 
-NAVY, NAVY_HEAD, LINE = "#00204D", "#0A3266", "rgba(255,255,255,0.10)"
-INK, INK_DIM = "#FFFFFF", "#9FB3CE"
-RICH, CHEAP, FLAT = "#FF6B6B", "#3DD68C", "#9FB3CE"
+NAVY, BAND, LINE = "#00204D", "#00193C", "rgba(255,255,255,0.13)"
+INK, DIM = "#FFFFFF", "#8FA6C4"
 
 st.markdown(f"""
 <style>
-.blotter {{ background:{NAVY}; border-radius:10px; padding:0; overflow:hidden;
-            font-variant-numeric:tabular-nums; margin-bottom:10px; }}
-.blotter table {{ width:100%; border-collapse:collapse; }}
-.blotter th {{ background:{NAVY_HEAD}; color:{INK_DIM}; font-size:11px; font-weight:600;
-               letter-spacing:.09em; text-transform:uppercase; padding:11px 16px; text-align:right;
-               white-space:nowrap; }}
-.blotter th.l, .blotter td.l {{ text-align:left; }}
-.blotter td {{ color:{INK}; font-size:15px; padding:13px 16px; text-align:right;
-               border-top:1px solid {LINE}; white-space:nowrap; }}
-.blotter tr:hover td {{ background:rgba(255,255,255,0.045); }}
-.sym {{ font-weight:700; letter-spacing:.02em; }}
-.desc {{ color:{INK_DIM}; font-size:12px; display:block; margin-top:2px; font-weight:400; }}
-.unit {{ color:{INK_DIM}; font-size:11px; margin-left:4px; }}
-.rich {{ color:{RICH}; font-weight:600; }}
-.cheap {{ color:{CHEAP}; font-weight:600; }}
-.flat {{ color:{FLAT}; }}
-.bar {{ display:inline-block; height:4px; border-radius:2px; vertical-align:middle; margin-left:8px; }}
-.asof {{ color:{INK_DIM}; font-size:12px; }}
+/* full-bleed navy: the monitor owns the whole viewport */
+.stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {{ background:{NAVY}; }}
+[data-testid="stHeader"] {{ background:transparent; }}
+[data-testid="stMain"] .block-container {{ padding:2.2rem 2.6rem 3rem; max-width:none; }}
+[data-testid="stMain"] h1 {{ color:{INK}; font-size:2.1rem; letter-spacing:-.01em; margin-bottom:.15rem; }}
+[data-testid="stMain"] [data-testid="stCaptionContainer"],
+[data-testid="stMain"] [data-testid="stCaptionContainer"] p {{ color:{DIM}; }}
+[data-testid="stMain"] a {{ color:#8FB8FF; }}
+
+table.blot {{ width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums;
+              margin-top:1.1rem; }}
+table.blot th {{ color:{DIM}; font-size:10.5px; font-weight:600; letter-spacing:.12em;
+                 text-transform:uppercase; padding:0 14px 10px; text-align:right;
+                 white-space:nowrap; border-bottom:1px solid {LINE}; }}
+table.blot th.l, table.blot td.l {{ text-align:left; }}
+table.blot td {{ color:{INK}; font-size:15.5px; padding:14px; text-align:right;
+                 white-space:nowrap; border-bottom:1px solid {LINE}; }}
+table.blot tr:hover td {{ background:rgba(255,255,255,.05); }}
+
+td.grp {{ background:{BAND}; color:{DIM}; font-size:10.5px; font-weight:700;
+          letter-spacing:.16em; text-transform:uppercase; padding:9px 14px;
+          border-top:1px solid {LINE}; border-bottom:1px solid {LINE}; }}
+.sym {{ font-weight:700; }}
+.desc {{ color:{DIM}; font-size:11.5px; display:block; margin-top:3px; font-weight:400; }}
+.unit {{ color:{DIM}; font-size:11px; margin-left:5px; }}
+.pill {{ display:inline-block; min-width:96px; padding:5px 10px; border-radius:5px;
+         font-weight:700; font-size:14px; }}
+.act {{ font-size:10px; letter-spacing:.1em; opacity:.85; margin-right:7px; }}
+.legend {{ color:{DIM}; font-size:11.5px; margin-top:.9rem; }}
+.chip {{ display:inline-block; width:26px; height:11px; border-radius:3px;
+         vertical-align:middle; margin:0 5px 0 12px; }}
 </style>
 """, unsafe_allow_html=True)
 
-sig = load_signals()
+sig_df = load_signals()
 bs = load_balance_sheet()
-rows = build_rows(sig)
+rows = build_rows(sig_df)
 nxt, days = next_release(bs.vintage_date.unique())
-as_of = sig.vintage_date.max()
+as_of = pd.Timestamp(sig_df.vintage_date.max())
+nxt_txt = f"{nxt:%d %b %Y}" if nxt is not None else "—"
 
 st.title("Maize Monitor")
-c1, c2, c3 = st.columns([2, 1, 1])
-c1.markdown(f"<span class='asof'>South Africa · point-in-time S&amp;D · "
-            f"latest release <b>{pd.Timestamp(as_of):%d %b %Y}</b></span>", unsafe_allow_html=True)
-c2.markdown(f"<span class='asof'>Next release <b>{nxt:%d %b %Y}</b>"
-            f"{f' · in {days}d' if days is not None else ''}</span>" if nxt is not None
-            else "<span class='asof'>Next release —</span>", unsafe_allow_html=True)
-c3.markdown(f"<span class='asof'>{len(rows)} markets</span>", unsafe_allow_html=True)
+st.caption(f"South Africa · point-in-time supply & demand · latest release **{as_of:%d %b %Y}** · "
+           f"next release **{nxt_txt}**{f' (in {days} days)' if days is not None else ''} · "
+           f"{len(rows)} markets")
 
+html = ["<table class='blot'><tr>"
+        "<th class='l'>Symbol</th><th>Market</th><th>Fair value</th><th>Deviation</th>"
+        "<th>Signal (&sigma;)</th><th>Next release</th><th>Cover</th></tr>"]
 
-def dev_cell(dev: float | None, z: float | None, pct: bool) -> str:
-    if dev is None:
-        return "<span class='flat'>—</span>"
-    cls = "rich" if (z or 0) > 0.5 else "cheap" if (z or 0) < -0.5 else "flat"
-    width = min(abs(z or 0) / 3 * 46, 46)
-    colour = RICH if cls == "rich" else CHEAP if cls == "cheap" else FLAT
-    suffix = "%" if pct else " pp"
-    bar = f"<span class='bar' style='width:{width:.0f}px;background:{colour};opacity:.55'></span>"
-    return f"<span class='{cls}'>{dev:+,.1f}{suffix}</span>{bar}"
-
-
-body = []
+current_group = None
 for r in rows:
-    price = f"{r.market:,.0f}" if r.unit == "R/t" and r.market is not None else (
-        f"{r.market:+.1f}" if r.market is not None else "—")
-    fair = f"{r.fair:,.0f}" if r.unit == "R/t" and r.fair is not None else (
-        f"{r.fair:+.1f}" if r.fair is not None else "—")
-    z = f"{r.z:+.2f}" if r.z is not None else "—"
-    zc = "rich" if (r.z or 0) > 0.5 else "cheap" if (r.z or 0) < -0.5 else "flat"
-    cover = f"{r.cover:.1f}" if r.cover is not None else "—"
-    body.append(
+    if r.group != current_group:
+        current_group = r.group
+        html.append(f"<tr><td class='grp' colspan='7'>{r.group}</td></tr>")
+
+    money = r.unit == "R/t"
+    market = ("—" if r.market is None else f"{r.market:,.0f}" if money else f"{r.market:+.1f}")
+    fair = ("—" if r.fair is None else f"{r.fair:,.0f}" if money else f"{r.fair:+.1f}")
+    dev = "—" if r.dev is None else f"{r.dev:+,.1f}{'%' if r.dev_pct else ' pp'}"
+    cover = "—" if r.cover is None else f"{r.cover:.1f}"
+
+    action, colour, alpha = signal(r.z)
+    zt = "—" if r.z is None else f"{r.z:+.2f}"
+    if alpha:
+        rgb = tuple(int(colour[i:i + 2], 16) for i in (1, 3, 5))
+        pill = (f"<span class='pill' style='background:rgba({rgb[0]},{rgb[1]},{rgb[2]},{alpha});"
+                f"color:{colour};'><span class='act'>{action}</span>{zt}</span>")
+        dev_html = f"<span style='color:{colour};font-weight:600'>{dev}</span>"
+    else:
+        pill = f"<span class='pill' style='background:rgba(255,255,255,.05);color:{DIM};'>{zt}</span>"
+        dev_html = f"<span style='color:{DIM}'>{dev}</span>"
+
+    html.append(
         f"<tr><td class='l'><span class='sym'>{r.symbol}</span>"
         f"<span class='desc'>{r.description}</span></td>"
-        f"<td>{price}<span class='unit'>{r.unit}</span></td>"
+        f"<td>{market}<span class='unit'>{r.unit}</span></td>"
         f"<td>{fair}<span class='unit'>{r.unit}</span></td>"
-        f"<td>{dev_cell(r.dev, r.z, r.dev_pct)}</td>"
-        f"<td class='{zc}'>{z}</td>"
+        f"<td>{dev_html}</td><td>{pill}</td>"
         f"<td>{nxt:%d %b}</td>"
         f"<td>{cover}<span class='unit'>mo</span></td></tr>")
 
+html.append("</table>")
+st.markdown("".join(html), unsafe_allow_html=True)
+
 st.markdown(
-    "<div class='blotter'><table>"
-    "<tr><th class='l'>Symbol</th><th>Market</th><th>Fair value</th><th>Deviation</th>"
-    "<th>σ</th><th>Next release</th><th>Cover</th></tr>"
-    + "".join(body) + "</table></div>", unsafe_allow_html=True)
+    "<div class='legend'>"
+    "<span class='chip' style='background:rgba(255,92,92,.55)'></span>rich vs fair value &rarr; sell"
+    "<span class='chip' style='background:rgba(47,207,135,.55)'></span>cheap &rarr; buy"
+    "<span class='chip' style='background:rgba(255,255,255,.05)'></span>within &plusmn;0.5&sigma; &rarr; no signal"
+    "&nbsp;&nbsp;·&nbsp;&nbsp;shading intensity scales with severity, saturating at 2.5&sigma;."
+    "</div>", unsafe_allow_html=True)
 
 st.caption(
-    "Fair value is the expanding-window model fit, estimated only on data published before each "
-    "release, so it never saw the point it prices. Deviation is market less fair value; σ is that "
-    "deviation divided by its own rolling standard deviation — **positive means rich**. "
-    "Cover is months of consumption held as stock, from the latest SAGIS release. "
-    "Rows 3–7 are relative markets, quoted in percentage points rather than rand."
+    "Fair value is the expanding-window model fit, estimated only on releases published before each "
+    "observation, so it never saw the point it prices. Deviation is market less fair value in each "
+    "market's own units; σ standardises it by its own rolling deviation. Cover is months of "
+    "consumption held as stock at the latest SAGIS release."
 )
 
-st.page_link("pages/0_Overview.py", label="Overview →")
-st.page_link("pages/3_Fair_Value.py", label="Fair Value models →")
-st.page_link("pages/5_Ask.py", label="Ask the desk →")
+c1, c2, c3 = st.columns(3)
+c1.page_link("pages/0_Overview.py", label="Overview →")
+c2.page_link("pages/3_Fair_Value.py", label="Fair Value models →")
+c3.page_link("pages/5_Ask.py", label="Ask the desk →")

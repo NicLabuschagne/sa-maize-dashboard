@@ -102,3 +102,27 @@ def test_local_answer_never_calls_the_api(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(anthropic, "Anthropic", boom)
     a = C.local_answer([{"role": "user", "content": "is white rich right now?"}])
     assert a.local
+
+
+@pytest.mark.parametrize("z,action,alpha_gt", [
+    (2.1, "SELL", 0.4), (-1.4, "BUY", 0.25), (0.9, "SELL", 0.15),
+])
+def test_signal_shading_scales_with_severity(z: float, action: str, alpha_gt: float) -> None:
+    from app.data.blotter import signal
+
+    a, _, alpha = signal(z)
+    assert a == action and alpha > alpha_gt
+
+
+@pytest.mark.parametrize("z", [0.0, 0.49, -0.49, None])
+def test_signal_is_neutral_inside_the_deadband(z) -> None:
+    from app.data.blotter import signal
+
+    action, _, alpha = signal(z)
+    assert action == "" and alpha == 0.0
+
+
+def test_signal_alpha_saturates() -> None:
+    from app.data.blotter import signal
+
+    assert signal(3.0)[2] == signal(9.0)[2] <= 0.55

@@ -38,5 +38,7 @@ def test_home_blotter_lists_every_market() -> None:
     at = AppTest.from_file(str(ROOT / "app" / "Home.py"), default_timeout=120).run()
     assert not at.exception, at.exception[0].value if at.exception else None
     html = " ".join(m.body for m in at.markdown)
-    for _, _, symbol, _, _ in MARKETS:
+    for _, _, _, symbol, _, _ in MARKETS:
         assert symbol in html, f"missing market row: {symbol}"
+    for group in {m[0] for m in MARKETS}:
+        assert group in html, f"missing group band: {group}"

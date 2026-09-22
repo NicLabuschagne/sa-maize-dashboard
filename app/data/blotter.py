@@ -14,20 +14,21 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-# (model, grain_class) -> (display symbol, description, unit)
-MARKETS: list[tuple[str, str, str, str, str]] = [
-    ("A", "white", "WMAZ", "SAFEX White Maize, front", "R/t"),
-    ("A", "yellow", "YMAZ", "SAFEX Yellow Maize, front", "R/t"),
-    ("B", "white", "WMAZ 2nd-1st", "White calendar spread", "% ann"),
-    ("B", "yellow", "YMAZ 2nd-1st", "Yellow calendar spread", "% ann"),
-    ("C", "white_vs_yellow", "WMAZ-YMAZ", "White premium over yellow", "% of yellow"),
-    ("D", "white", "WMAZ/parity", "White vs CBOT import parity", "%"),
-    ("D", "yellow", "YMAZ/parity", "Yellow vs CBOT import parity", "%"),
+# group, model, grain_class, display symbol, description, unit
+MARKETS: list[tuple[str, str, str, str, str, str]] = [
+    ("White maize", "A", "white", "WMAZ", "SAFEX white, front month", "R/t"),
+    ("White maize", "B", "white", "WMAZ 2nd-1st", "Calendar spread", "% ann"),
+    ("White maize", "D", "white", "WMAZ/parity", "vs CBOT import parity", "%"),
+    ("Yellow maize", "A", "yellow", "YMAZ", "SAFEX yellow, front month", "R/t"),
+    ("Yellow maize", "B", "yellow", "YMAZ 2nd-1st", "Calendar spread", "% ann"),
+    ("Yellow maize", "D", "yellow", "YMAZ/parity", "vs CBOT import parity", "%"),
+    ("Cross", "C", "white_vs_yellow", "WMAZ-YMAZ", "White premium over yellow", "% of yellow"),
 ]
 
 
 @dataclass
 class Row:
+    group: str
     symbol: str
     description: str
     unit: str
@@ -59,11 +60,11 @@ def next_release(vintages: pd.Series, today: pd.Timestamp | None = None) -> tupl
 
 def build_rows(signals: pd.DataFrame) -> list[Row]:
     rows: list[Row] = []
-    for model, cls, sym, desc, unit in MARKETS:
+    for group, model, cls, sym, desc, unit in MARKETS:
         d = signals[(signals.model == model) & (signals.grain_class == cls)]
         d = d.dropna(subset=["actual"]).sort_values("vintage_date")
         if d.empty:
-            rows.append(Row(sym, desc, unit, None, None, None, False, None, None, None))
+            rows.append(Row(group, sym, desc, unit, None, None, None, False, None, None, None))
             continue
         last = d.iloc[-1]
         resid = last.residual if pd.notna(last.residual) else None
@@ -82,7 +83,7 @@ def build_rows(signals: pd.DataFrame) -> list[Row]:
             fair = float(last.fair_value) if pd.notna(last.fair_value) else None
             dev = float(resid) if resid is not None else None
             pct = False
-        rows.append(Row(sym, desc, unit, market, fair, dev, pct,
+        rows.append(Row(group, sym, desc, unit, market, fair, dev, pct,
                         float(last.z) if pd.notna(last.z) else None,
                         float(last.months_cover) if pd.notna(last.months_cover) else None,
                         last.vintage_date))
@@ -95,3 +96,18 @@ def fmt(v: float | None, unit: str, places: int = 0) -> str:
     if unit == "R/t":
         return f"{v:,.0f}"
     return f"{v:+.{max(places, 1)}f}" if unit != "R/t" else f"{v:,.0f}"
+
+
+def signal(z: float | None) -> tuple[str, str, float]:
+    """(action, colour, shading alpha) for a standardised deviation.
+
+    Positive z = rich = a sell; negative = cheap = a buy. Alpha scales with severity and
+    saturates at 2.5 sigma so one extreme reading cannot wash out the rest of the board.
+    """
+    if z is None or (isinstance(z, float) and np.isnan(z)):
+        return "", "#9FB3CE", 0.0
+    if abs(z) < 0.5:
+        return "", "#9FB3CE", 0.0
+    action = "SELL" if z > 0 else "BUY"
+    colour = "#FF5C5C" if z > 0 else "#2FCF87"
+    return action, colour, round(min(abs(z) / 2.5, 1.0) * 0.55, 3)
