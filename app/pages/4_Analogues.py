@@ -213,7 +213,10 @@ if len(is_ent):
     st.caption(
         f"Backtesting **{len(is_ent)} of {len(ent)}** matched releases — "
         f"{_lo:%b %Y} to {_hi:%b %Y}"
-        + (f", with {len(oos_ent)} held out from {holdout_from}." if len(oos_ent) else " (no holdout).")
+        + (" — no holdout set." if holdout_from == "(no holdout)"
+           else f", with {len(oos_ent)} held out from {holdout_from}." if len(oos_ent)
+           else f". No matched release falls in the {holdout_from}+ holdout, so there is nothing "
+                f"to score there — move the slider left to reserve some.")
         + f" The equity curve ends where the holdout begins. The final release also needs "
           f"{bt_h} trading days of price history after it to complete a trade, so the newest one or "
           f"two releases may not produce a trade yet.")
@@ -240,7 +243,8 @@ m5.metric("Sharpe (ann.)", "—" if s["sharpe"] != s["sharpe"] else f"{s['sharpe
 m6.metric("Max drawdown", f"{s['max_dd'] * 100:.0f}%")
 
 if s["n_trades"]:
-    eq = res.equity
+    _lo_i, _hi_i = res.trades.entry_date.min(), res.trades.exit_date.max()
+    eq = res.equity.loc[_lo_i:_hi_i]
     fig = go.Figure()
     P.line(fig, eq.index, (eq - 1) * 100, "equity (in-sample)", entity=cls,
            hover="%{y:+.1f}%<extra></extra>")
