@@ -1,0 +1,17 @@
+# Theme derived from bamfunds.com design tokens (light, near-black text, blue accent, navy sidebar)
+[theme]
+base = "light"
+primaryColor = "#0054CC"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F2F2F2"
+textColor = "#101010"
+font = "sans serif"
+
+[theme.sidebar]
+backgroundColor = "#00204D"
+secondaryBackgroundColor = "#0A3266"
+textColor = "#FFFFFF"
+
+[server]
+headless = true
+runOnSave = true

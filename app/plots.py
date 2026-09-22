@@ -5,26 +5,26 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-# Categorical slots (light, dark). Entities keep their slot regardless of what else is plotted.
+# Palette derived from bamfunds.com design tokens, validated for CVD separation on a white surface.
+# Entities keep their slot regardless of what else is plotted. (light, dark) pairs.
 _SLOTS = {
-    "white":  ("#2a78d6", "#3987e5"),
+    "white":  ("#0054cc", "#5b99f1"),   # BAM primary blue
     "yellow": ("#eb6834", "#d95926"),
-    "total":  ("#1baf7a", "#199e70"),
-    "aux":    ("#eda100", "#c98500"),
-    "aux2":   ("#4a3aa7", "#9085e9"),
+    "total":  ("#4a3aa7", "#9085e9"),
+    "aux":    ("#118554", "#2fb377"),   # BAM green
+    "aux2":   ("#8c8c85", "#bdbdbd"),   # BAM gray-600
 }
 _SYMBOL_CLASS = {"WMAZ": "white", "YMAZ": "yellow"}
-_MUTED = ("#c3c2b7", "#52514e")
-_GRID = ("#e8e7e3", "#2a2a28")
-_TEXT = ("#0b0b0b", "#ffffff")
-_TEXT2 = ("#52514e", "#c3c2b7")
+_MUTED = ("#bdbdbd", "#52514e")
+_GRID = ("#dfdfdb", "#2a2a28")
+_TEXT = ("#101010", "#ffffff")
+_TEXT2 = ("#8c8c85", "#c3c2b7")
+STATUS = {"good": "#118554", "bad": "#dc2626", "navy": "#00204d"}
 
 
 def _dark() -> bool:
-    try:
-        return st.context.theme.type == "dark"
-    except Exception:  # noqa: BLE001 - older Streamlit
-        return False
+    # The theme is fixed to light in .streamlit/config.toml; dark slots are kept for a future toggle.
+    return False
 
 
 def color(entity: str) -> str:

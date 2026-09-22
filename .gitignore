@@ -2,8 +2,8 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-.streamlit/secrets.toml
 data/raw/
 *.parquet
 *.duckdb
 *.duckdb.wal
+.streamlit/secrets.toml

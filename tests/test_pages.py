@@ -7,7 +7,7 @@ from streamlit.testing.v1 import AppTest
 from config import DB_PATH
 
 ROOT = Path(__file__).resolve().parents[1]
-PAGES = [ROOT / "app" / "main.py", *sorted((ROOT / "app" / "pages").glob("*.py"))]
+PAGES = [ROOT / "app" / "Overview.py", *sorted((ROOT / "app" / "pages").glob("*.py"))]
 
 
 @pytest.mark.parametrize("page", PAGES, ids=[p.stem for p in PAGES])

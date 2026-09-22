@@ -4,13 +4,13 @@
 Standalone Streamlit dashboard. Not part of the Scratch research repo.
 
 ## Layout
-- `app/main.py` — entry point (home page)
+- `app/Overview.py` — entry point (home page)
 - `app/pages/` — one file per page; Streamlit auto-discovers them
 - `app/data/` — data loaders; all file paths come from `config.py` or env vars
 - `tests/` — pytest
 
 ## Run
-    streamlit run app/main.py
+    streamlit run app/Overview.py
 
 ## Rules
 - No hardcoded file paths; use `config.py` / env vars
