@@ -108,7 +108,7 @@ def flow_cell(symbol: str | None) -> str:
 
 html = ["<table class='blot'><tr>"
         "<th class='l'>Symbol</th><th>Market</th><th>Fair value</th><th>Deviation</th>"
-        "<th>Signal (&sigma;)</th><th>Next release</th><th>Cover</th></tr>"]
+        "<th>Signal (&sigma;)</th><th>Flow 1w</th><th>Next release</th><th>Cover</th></tr>"]
 
 current_group = None
 for r in rows:

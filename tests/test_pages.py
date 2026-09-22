@@ -66,3 +66,24 @@ def test_home_replays_point_in_time_and_shades_signals() -> None:
 
     caption = " ".join(c.value for c in at.caption)
     assert "replayed at release" in caption and "26 Jul 2016" in caption
+
+
+def test_home_table_headers_match_body_columns() -> None:
+    """Regression: a silent no-op string replace once left the Flow column unheaded."""
+    src = (ROOT / "app" / "Home.py").read_text(encoding="utf-8")
+    header = src[src.index('html = ['):src.index('current_group')]
+    body = src[src.index('current_group'):src.index('html.append("</table>")')]
+    n_head = header.count("<th")
+    n_body = body.count("<td") - 1          # the group band row contributes one spanning cell
+    assert n_head == n_body, f"{n_head} headers vs {n_body} body cells"
+    assert f"colspan='{n_head}'" in body, "group band must span every column"
+
+
+def test_home_shows_a_flow_column() -> None:
+    if not DB_PATH.exists():
+        pytest.skip("warehouse not built")
+    at = AppTest.from_file(str(ROOT / "app" / "Home.py"), default_timeout=180).run()
+    assert not at.exception
+    html = " ".join(m.body for m in at.markdown)
+    assert "Flow 1w" in html
+    assert "pp" in html, "flow values should be quoted in position points"
