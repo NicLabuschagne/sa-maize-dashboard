@@ -35,3 +35,12 @@ def load_ingest_log() -> pd.DataFrame:
 @st.cache_data
 def load_macro() -> pd.DataFrame:
     return _query("SELECT * FROM macro ORDER BY series, date")
+
+
+@st.cache_data
+def load_macro_snap() -> pd.DataFrame:
+    """Series snapped at the SAFEX mark (10:00 UTC). Empty frame if the table is absent."""
+    try:
+        return _query("SELECT * FROM macro_snap ORDER BY series, date")
+    except Exception:  # noqa: BLE001 - table not built yet
+        return pd.DataFrame(columns=["series", "date", "value"])

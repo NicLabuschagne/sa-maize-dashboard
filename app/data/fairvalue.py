@@ -246,3 +246,72 @@ def seasonal_benchmark(p: pd.DataFrame, horizon: str = "1m", min_obs: int = MIN_
         m = hist[hist.my_month == p.my_month.iloc[t]][col].mean()
         out[t] = m
     return pd.Series(out, index=p.index, name=f"seasonal_{horizon}")
+
+
+# ----------------------------------------------------------------------------- import/export parity
+BU_PER_TONNE = 39.3683      # corn: 1 short bushel = 25.4012 kg
+SAFEX_MARK_UTC = 10         # 12:00 SAST, no DST
+
+
+def world_parity(snap: pd.DataFrame) -> pd.Series:
+    """CBOT corn converted to R/t using the CBOT and USD/ZAR prints at the SAFEX mark (10:00 UTC).
+
+    CBOT settles ~19:20 UTC, after the SAFEX mark, so the same-day settle is NOT knowable at the
+    mark; the 10:00 UTC bar is the overnight Globex print and is.
+    """
+    w = snap.pivot(index="date", columns="series", values="value").sort_index()
+    need = {"cbot_corn_safexclose", "usdzar_safexclose"}
+    if not need.issubset(w.columns):
+        return pd.Series(dtype=float, name="world_rand")
+    s = (w["cbot_corn_safexclose"] * BU_PER_TONNE * w["usdzar_safexclose"]).dropna()
+    s.index = pd.DatetimeIndex(s.index).as_unit("ns")
+    return s.rename("world_rand")
+
+
+def panel_parity(sd: pd.DataFrame, cont: pd.DataFrame, snap: pd.DataFrame, cpi: pd.DataFrame,
+                 grain_class: str, symbol: str) -> pd.DataFrame:
+    """Model D input: y = log(SAFEX / world parity) — the basis; x = log cover.
+
+    Forward outcome is the *relative* return, SAFEX minus world parity, because the basis is a
+    relative-value quantity: it converges by SAFEX moving toward parity or parity moving toward SAFEX.
+    Outright forward returns are kept alongside as `fwd_outright_*`.
+    """
+    world = world_parity(snap)
+    if world.empty:
+        return pd.DataFrame()
+    p = panel_price(sd, cont, cpi, grain_class, symbol)
+    p = p.rename(columns={f"fwd_{h}": f"fwd_outright_{h}" for h in HORIZONS})
+    p["trade_date"] = p["trade_date"].astype("datetime64[ns]")
+    wd = world.reset_index()
+    wd.columns = ["date", "world_rand"]
+    p = pd.merge_asof(p.sort_values("trade_date"), wd, left_on="trade_date", right_on="date",
+                      direction="backward", tolerance=pd.Timedelta("5D"))
+    p = p.dropna(subset=["world_rand", "close_1"]).reset_index(drop=True)
+    p["basis"] = np.log(p["close_1"] / p["world_rand"])
+    p["y"] = p["basis"]
+    p["x"] = np.log(p["months_cover"])
+    fw = forward_returns(world, p["vintage_date"])
+    for h in HORIZONS:
+        p[f"fwd_world_{h}"] = fw[f"fwd_{h}"].to_numpy()
+        p[f"fwd_{h}"] = p[f"fwd_outright_{h}"] - p[f"fwd_world_{h}"]
+    return p
+
+
+def panel_price_with_world(sd: pd.DataFrame, cont: pd.DataFrame, snap: pd.DataFrame, cpi: pd.DataFrame,
+                           grain_class: str, symbol: str) -> pd.DataFrame:
+    """Model A augmented with the contemporaneous world price in real rand (`lw`).
+
+    Kept to document a tested-and-rejected specification: it raises R² sharply and lowers forward IC.
+    """
+    world = world_parity(snap)
+    if world.empty:
+        return pd.DataFrame()
+    p = panel_price(sd, cont, cpi, grain_class, symbol)
+    p["trade_date"] = p["trade_date"].astype("datetime64[ns]")
+    wd = world.reset_index()
+    wd.columns = ["date", "world_rand"]
+    p = pd.merge_asof(p.sort_values("trade_date"), wd, left_on="trade_date", right_on="date",
+                      direction="backward", tolerance=pd.Timedelta("5D"))
+    p = p.dropna(subset=["world_rand", "y"]).reset_index(drop=True)
+    p["lw"] = np.log(p["world_rand"] * (p["real_px"] / p["close_1"]))   # same CPI deflator as y
+    return p

@@ -113,7 +113,7 @@ fig.add_hline(y=0, line=dict(color=P.muted(), width=1))
 P.layout(fig, f"{sym} front month, cumulative log return from the first close ≥ 1 day after each matched release",
          ytitle="%", xtitle="trading days after entry", height=430)
 fig.update_yaxes(tickformat="+.0f")
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 # --- distribution at horizon ---------------------------------------------------------------
 st.markdown("#### 3. Distribution at a horizon: conditional vs all releases")
@@ -137,14 +137,14 @@ with c1:
     fig.update_layout(barmode="overlay")
     P.layout(fig, f"{h_name} forward log return (%), density", ytitle="density", xtitle="%", height=360)
     fig.update_layout(hovermode="closest")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 with c2:
     tbl = pd.DataFrame({
         "conditional": [S["n_obs"], S["cond_mean"], S["cond_median"], S["cond_p_neg"], S["cond_p10"], S["cond_p90"]],
         "all releases": [S["n_uncond"], S["uncond_mean"], S["uncond_median"], S["uncond_p_neg"], S["uncond_p10"], S["uncond_p90"]],
     }, index=["n", "mean %", "median %", "P(return < 0)", "10th pct %", "90th pct %"])
     st.dataframe(tbl.style.format(lambda v: f"{v:.0f}" if isinstance(v, (int, np.integer)) or v == int(v) and abs(v) > 20
-                                  else f"{v:+.2f}"), use_container_width=True)
+                                  else f"{v:+.2f}"), width="stretch")
     st.markdown(f"**Episodes:** {S['n_episodes']} independent · **KS test** D = {S['ks_stat']:.2f}, p = {S['ks_p']:.2f}")
     st.caption("KS compares the two samples' shapes. Overlapping windows inflate n_obs, so read p against the episode "
                "count, not the observation count. A shift in median with P(return<0) moving away from ~50% is the "
@@ -156,7 +156,7 @@ with st.expander("Matched releases"):
     m["fwd_h_%"] = cond.to_numpy()
     st.dataframe(m.style.format({"months_cover": "{:.2f}", "z": "{:+.2f}", "spread_z": "{:+.2f}",
                                  "months_cover_pct_same_month": "{:.2f}", "months_cover_yoy": "{:+.2f}",
-                                 "close_1": "{:,.0f}", "fwd_h_%": "{:+.2f}"}), use_container_width=True, height=400)
+                                 "close_1": "{:,.0f}", "fwd_h_%": "{:+.2f}"}), width="stretch", height=400)
 
 with st.expander("Method notes"):
     st.markdown("""

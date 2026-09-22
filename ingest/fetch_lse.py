@@ -22,6 +22,12 @@ from config import DB_PATH  # noqa: E402
 SERIES = {"southafriconpriindcp": "za_cpi"}
 CANDLES = {"USD/ZAR": "usdzar", "CORN/USD": "cbot_corn"}
 
+# SAFEX grain marks at 12:00 SAST. South Africa is UTC+2 with no DST, so the snapshot hour is
+# fixed at 10:00 UTC. CBOT corn settles 19:20/20:20 UTC, i.e. AFTER the SAFEX close, so the
+# same-day settle is not knowable at the mark; the 10:00 UTC bar (overnight Globex) is.
+SNAP_HOUR_UTC = 10
+SNAP_SYMBOLS = {"USD/ZAR": "usdzar_safexclose", "CORN/USD": "cbot_corn_safexclose"}
+
 
 def fetch_macro(api_key: str | None = None, start: str = "2005-01-01") -> dict:
     from lse import LSE  # imported here so the rest of the app never needs the SDK
@@ -51,6 +57,43 @@ def fetch_macro(api_key: str | None = None, start: str = "2005-01-01") -> dict:
             "coverage": m.groupby("series").date.agg(["min", "max", "count"]).to_dict("index")}
 
 
+def fetch_snapshots(api_key: str | None = None, start_year: int = 2009) -> dict:
+    """Hourly bars reduced to the bar that closes at the SAFEX mark (10:00 UTC), plus the
+    previous CBOT settle as a robustness series. Written to table `macro_snap`."""
+    from lse import LSE
+
+    key = api_key or os.environ.get("LSE_API_KEY")
+    if not key:
+        return {"ok": False, "rows": 0, "error": "LSE_API_KEY not set"}
+    c = LSE(api_key=key)
+    this_year = pd.Timestamp.today().year
+    frames = []
+    for sym, name in SNAP_SYMBOLS.items():
+        rows: list[dict] = []
+        for year in range(start_year, this_year + 1):
+            for q0 in (1, 4, 7, 10):  # quarterly: ~2200 hourly bars, under the 5000-row cap
+                q1 = q0 + 2
+                end = pd.Timestamp(year=year, month=q1, day=1) + pd.offsets.MonthEnd(0)
+                rows += c.candles(sym, "1h", start=f"{year}-{q0:02d}-01",
+                                  end=end.strftime("%Y-%m-%d"), limit=5000, order="asc")
+        d = pd.DataFrame(rows)
+        if d.empty:
+            continue
+        d["ts"] = pd.to_datetime(d["timestamp"]).dt.tz_localize(None)
+        d = d.drop_duplicates("ts").sort_values("ts")
+        snap = d[d["ts"].dt.hour == SNAP_HOUR_UTC]
+        frames.append(pd.DataFrame({"series": name, "date": snap["ts"].dt.normalize(),
+                                    "value": snap["close"].to_numpy()}))
+    m = pd.concat(frames, ignore_index=True)
+    m["value"] = pd.to_numeric(m["value"], errors="coerce")
+    m = m.dropna().drop_duplicates(["series", "date"]).sort_values(["series", "date"]).reset_index(drop=True)
+    con = duckdb.connect(str(DB_PATH))
+    con.execute("CREATE OR REPLACE TABLE macro_snap AS SELECT * FROM m")
+    con.close()
+    return {"ok": True, "rows": len(m), "error": None,
+            "coverage": m.groupby("series").date.agg(["min", "max", "count"]).to_dict("index")}
+
+
 if __name__ == "__main__":
-    res = fetch_macro()
-    print(res)
+    print(fetch_macro())
+    print(fetch_snapshots())

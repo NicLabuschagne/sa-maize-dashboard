@@ -38,7 +38,7 @@ if show_vint:
 P.layout(fig, "Front-month close, main delivery months (Mar/May/Jul/Sep/Dec), rolled 7 days before expiry", ytitle="R/t")
 fig.update_xaxes(range=[pd.Timestamp(start), cont.trade_date.max()])
 with c1:
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 # --- spreads ---------------------------------------------------------------------------------
 l, r = st.columns(2)
@@ -50,7 +50,7 @@ with l:
                hover="R%{y:+,.0f}<extra>" + sym + "</extra>")
     fig.add_hline(y=0, line=dict(color=P.muted(), width=1))
     P.layout(fig, "Calendar spread: 2nd main month − front (R/t). Positive = carry, negative = inversion", ytitle="R/t")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 with r:
     wy = D["wy"][D["wy"].trade_date >= pd.Timestamp(start)]
     fig = go.Figure()
@@ -58,7 +58,7 @@ with r:
            hover="R%{y:+,.0f}<extra></extra>")
     fig.add_hline(y=0, line=dict(color=P.muted(), width=1))
     P.layout(fig, "White premium over yellow, same front contract (R/t)", ytitle="R/t")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 # --- term structure on a chosen date ----------------------------------------------------------
 st.markdown("#### Forward curve on a date")
@@ -74,4 +74,4 @@ for sym in ("WMAZ", "YMAZ"):
                              hovertemplate="R%{y:,.0f}  OI %{customdata[0]:,}  vol %{customdata[1]:,}<extra>" + sym + "</extra>"))
 P.layout(fig, f"Settlement by contract, {pd.Timestamp(d):%d %b %Y} (contracts with open interest)", ytitle="R/t", height=320)
 fig.update_layout(hovermode="closest")
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")

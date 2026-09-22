@@ -32,14 +32,14 @@ is_ratio = attr in ("months_cover", "stocks_to_use")
 P.line(fig, sd.latest_month, sd[attr], f"{cls} {ATTRS[attr]}", entity=cls,
        hover=("%{y:.2f}" if is_ratio else "%{y:,.0f} t") + "<extra></extra>")
 P.layout(fig, f"{ATTRS[attr]} — monthly, as first published", ytitle="" if is_ratio else "t")
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 # --- 2. season-to-date overlay -----------------------------------------------------------
 if not is_ratio:
     piv = F.ytd_by_season(bs, attr, cls)
     n = st.slider("Seasons to show", 3, len(piv.columns), min(10, len(piv.columns)))
     st.plotly_chart(P.season_overlay(piv.iloc[:, -n:], f"{ATTRS[attr]} — season-to-date by marketing year",
-                                     entity=cls), use_container_width=True)
+                                     entity=cls), width="stretch")
 
 # --- 3. revisions ------------------------------------------------------------------------
 if attr not in ("months_cover", "stocks_to_use"):
@@ -50,10 +50,10 @@ if attr not in ("months_cover", "stocks_to_use"):
                                marker=dict(color=P.color(cls)), hovertemplate="%{y:+.2f}%<extra></extra>"))
         P.layout(fig, "Revision to the preliminary figure in the following release (%)", ytitle="%", height=300)
         fig.update_yaxes(tickformat=".1f")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     with c2:
         st.markdown("**Revision stats**")
-        st.dataframe(rev.revision_pct.describe().round(2).rename("pct").to_frame(), use_container_width=True)
+        st.dataframe(rev.revision_pct.describe().round(2).rename("pct").to_frame(), width="stretch")
 
 # --- 4. release table ---------------------------------------------------------------------
 st.markdown("#### Release table")
@@ -65,4 +65,4 @@ order = [a for a in ("opening_stock", "acquisition", "deliveries", "imports", "u
                      "human_consumption", "animal_feed", "gristing", "biofuel", "withdrawn_producers",
                      "released_end_consumer", "exports", "exports_products", "exports_whole", "sundries",
                      "closing_stock", "stock_storers_traders", "stock_processors") if a in tbl.index]
-st.dataframe(tbl.loc[order].style.format("{:,.0f}"), use_container_width=True, height=600)
+st.dataframe(tbl.loc[order].style.format("{:,.0f}"), width="stretch", height=600)

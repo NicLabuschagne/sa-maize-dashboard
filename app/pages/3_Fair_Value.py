@@ -15,7 +15,7 @@ from app.state import sidebar
 
 st.set_page_config(page_title="Fair Value", layout="wide")
 sel = sidebar()
-cls = sel["grain_class"]
+cls, sym = sel["grain_class"], sel["symbol"]
 st.title("Fair Value vs Point-in-Time S&D")
 if cls == "total":
     st.info("Pick **white** or **yellow** in the sidebar — fair value needs a traded price series.")
@@ -87,22 +87,22 @@ def model_block(key: str, xlab: str, ylab: str, entity: str, log_y: bool, fwd_la
 
     c1, c2 = st.columns([1, 1])
     with c1:
-        st.plotly_chart(scatter_fit(q, fit, xlab, ylab, entity, log_y), use_container_width=True)
+        st.plotly_chart(scatter_fit(q, fit, xlab, ylab, entity, log_y), width="stretch")
     with c2:
         st.plotly_chart(z_history(q, entity, "Signal: out-of-sample residual z (positive = rich to fundamentals)"),
-                        use_container_width=True)
+                        width="stretch")
         fig = go.Figure()
         P.line(fig, q.latest_month, np.exp(q.y) if log_y else q.y, "actual", entity=entity,
                hover="%{y:,.1f}<extra>actual</extra>")
         P.line(fig, q.latest_month, np.exp(q.fv) if log_y else q.fv, "fair value (expanding OOS)", entity="aux2",
                hover="%{y:,.1f}<extra>fair value</extra>")
         P.layout(fig, "", ytitle=ylab, height=220)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     st.markdown(f"##### Does the signal predict? Spearman IC of signal at *t* vs {fwd_label}, by horizon")
     st.caption("Cells show IC (block-bootstrap p-value, block = 6 months). Negative IC = rich → lower forward outcome, "
                "i.e. the expected sign. Entry is the first close ≥ 1 day after the SAGIS release.")
-    st.dataframe(fmt_ic(R[key]["ic"]), use_container_width=True)
+    st.dataframe(fmt_ic(R[key]["ic"]), width="stretch")
 
     c1, c2 = st.columns(2)
     with c1:
@@ -110,7 +110,7 @@ def model_block(key: str, xlab: str, ylab: str, entity: str, log_y: bool, fwd_la
         t = R[key]["terciles"]
         t = t[t.horizon == h].set_index("bucket")[["n", "mean", "median", "hit_neg"]]
         st.dataframe(t.style.format({"mean": "{:+.3f}", "median": "{:+.3f}", "hit_neg": "{:.0%}"}),
-                     use_container_width=True)
+                     width="stretch")
         st.caption("mean/median = forward outcome in the bucket; hit_neg = share of negative outcomes. "
                    "A working rich/cheap signal shows the *rich* bucket with the lowest mean and highest hit_neg.")
     with c2:
@@ -118,11 +118,85 @@ def model_block(key: str, xlab: str, ylab: str, entity: str, log_y: bool, fwd_la
             s = R[key]["stability"]
             s = s.assign(cell=s.apply(lambda r: f"{r.IC:+.2f} ({r.p:.2f}, n={int(r.n)})", axis=1))
             st.dataframe(s.pivot(index="sample", columns="horizon", values="cell").reindex(
-                index=list(R[key]["stability"]["sample"].unique())), use_container_width=True)
+                index=list(R[key]["stability"]["sample"].unique())), width="stretch")
             st.caption("Stability of the z-signal IC across sub-samples. If a result lives in one season, it isn't a result.")
 
 
-tabA, tabB, tabC = st.tabs(["A · Flat price vs cover", "B · Calendar spread vs cover", "C · White premium"])
+def parity_block() -> None:
+    if "D" not in R:
+        st.info("Parity needs the 10:00 UTC snapshot table. Run `python ingest/fetch_lse.py` with LSE_API_KEY set.")
+        return
+    fit = R["D"]["fit"]
+    q = fit.panel
+    last = q.iloc[-1]
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
+    k1.metric("Basis z", f"{last.z:+.2f}")
+    k2.metric("SAFEX vs parity", f"{np.exp(last.basis) - 1:+.1%}",
+              f"R{last.close_1:,.0f} vs R{last.world_rand:,.0f}")
+    k3.metric("Slope on log cover", f"{fit.coef_full['x']:+.3f}", f"t = {fit.tstat_full['x']:.1f}")
+    k4.metric("R² (full sample)", f"{fit.r2_full:.2f}")
+    k5.metric("Basis half-life", f"{fit.half_life_months:.1f} mo")
+    k6.metric("Obs (out-of-sample)", f"{q.z.notna().sum()}")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        fig = go.Figure()
+        P.line(fig, q.vintage_date, q.close_1, f"SAFEX {sym} front", entity=cls, hover="R%{y:,.0f}<extra>SAFEX</extra>")
+        P.line(fig, q.vintage_date, q.world_rand, "CBOT corn × USD/ZAR at the SAFEX mark", entity="aux2",
+               hover="R%{y:,.0f}<extra>parity</extra>")
+        P.layout(fig, "SAFEX against world parity, both in R/t", ytitle="R/t", height=360)
+        st.plotly_chart(fig, width="stretch")
+    with c2:
+        fig = go.Figure()
+        P.line(fig, q.vintage_date, (np.exp(q.basis) - 1) * 100, "basis (SAFEX / parity − 1)", entity=cls,
+               hover="%{y:+.1f}%<extra>basis</extra>")
+        P.line(fig, q.vintage_date, (np.exp(q.fv) - 1) * 100, "fair basis given cover (expanding OOS)", entity="aux2",
+               hover="%{y:+.1f}%<extra>fair</extra>")
+        fig.add_hline(y=0, line=dict(color=P.muted(), width=1))
+        P.layout(fig, "Basis and its stock-implied fair level", ytitle="%", height=360)
+        st.plotly_chart(fig, width="stretch")
+
+    st.plotly_chart(z_history(q, cls, "Basis z (positive = SAFEX rich to parity given local stocks)"),
+                    width="stretch")
+
+    st.markdown("##### The signal is relative, not directional")
+    st.caption("Same signal, two outcomes. Rows show IC (block-bootstrap p). The basis predicts the *spread* between "
+               "SAFEX and parity; it says little about where the outright price goes, because parity itself moves.")
+    st.dataframe(fmt_ic(R["D"]["ic"]), width="stretch")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        h = st.selectbox("Tercile table horizon", HZ, index=1, key="h_D")
+        t = R["D"]["terciles"]
+        t = t[t.horizon == h].set_index("bucket")[["n", "mean", "median", "hit_neg"]]
+        st.dataframe(t.style.format({"mean": "{:+.3f}", "median": "{:+.3f}", "hit_neg": "{:.0%}"}),
+                     width="stretch")
+        st.caption("Outcome is the SAFEX-minus-parity return.")
+    with c2:
+        s = R["D"]["stability"]
+        s = s.assign(cell=s.apply(lambda r: f"{r.IC:+.2f} ({r.p:.2f}, n={int(r.n)})", axis=1))
+        st.dataframe(s.pivot(index="sample", columns="horizon", values="cell"), width="stretch")
+
+    aw = R["A_world"]
+    b10 = aw["ic_base"].query("horizon == '10d'").IC.iloc[0]
+    w10 = aw["ic_world"].query("horizon == '10d'").IC.iloc[0]
+    st.markdown("##### Tested and rejected: adding the world price to the outright model (A)")
+    st.markdown(
+        f"Putting log(real world parity) into Model A alongside cover raises R² from "
+        f"**{aw['base'].r2_full:.2f} to {aw['with_world'].r2_full:.2f}** with a coefficient of "
+        f"**{aw['with_world'].coef_full['lw']:+.2f}** (t = {aw['with_world'].tstat_full['lw']:.1f}) — a large gain in "
+        f"explanatory power. It nonetheless makes the signal **worse**: 10-day IC falls from "
+        f"**{b10:+.2f} to {w10:+.2f}**. Controlling for a contemporaneous near-martingale converts the residual from "
+        f"*\"rich against a slow local fundamental\"*, which drifts back, into *\"out of line with CBOT×ZAR today\"*, "
+        f"which the physical trade arbitrages. Fit and forecast are not the same objective. "
+        f"The world price is therefore kept out of Model A and used here, on the leg it actually prices.")
+    st.caption("Robustness: repeating this with the previous CBOT settle instead of the 10:00 UTC print changes the "
+               "10-day IC by under 0.01 — the two world-price series correlate 0.9993 — so the conclusion is not an "
+               "artefact of the snapshot convention.")
+
+
+tabA, tabB, tabC, tabD = st.tabs(["A · Flat price vs cover", "B · Calendar spread vs cover", "C · White premium",
+                                  "D · Import/export parity"])
 
 with tabA:
     st.markdown(f"**log(real {cls} front price) = season + b · log(months of cover)** — price deflated by ZA CPI "
@@ -168,3 +242,11 @@ with st.expander("Method notes"):
 - **Known weakness**: Feb–May, when the Crop Estimates Committee's forecast drives price and realised stocks are stale.
   The "ex Feb–May" row in the stability table isolates it. Adding CEC vintages is the v2 fix.
 """)
+
+with tabD:
+    st.markdown("**log(SAFEX / world parity) = season + b · log(months of cover)**, where world parity is "
+                "CBOT corn × USD/ZAR converted to R/t. SAFEX marks at 12:00 SAST = 10:00 UTC and South Africa keeps no "
+                "DST, so both legs are taken from the 10:00 UTC bar — CBOT settles at 19:20/20:20 UTC, *after* the "
+                "SAFEX mark, so the same-day settle is not information a SAFEX trader has. The 10:00 UTC corn print is "
+                "the overnight Globex session and always carries volume.")
+    parity_block()

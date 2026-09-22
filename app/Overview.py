@@ -40,14 +40,14 @@ with left:
     P.line(fig, sd.latest_month, sd.months_cover, f"{cls} months of cover", entity=cls,
            hover="%{y:.1f} months<extra></extra>")
     P.layout(fig, "Months of cover (unutilised stock ÷ trailing-12m disappearance)", ytitle="months")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 with right:
     if cont is not None:
         fig = go.Figure()
         P.line(fig, cont.trade_date, cont.close_1, f"{sym} front month", entity=sym,
                hover="R%{y:,.0f}<extra></extra>")
         P.layout(fig, f"{sym} front-month close (main months, rolled {F.ROLL_DAYS}d before expiry)", ytitle="R/t")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         st.info("Select white or yellow for a price series.")
 
@@ -56,4 +56,4 @@ with st.expander("Latest release — balance sheet (latest month, tons)"):
     latest = bs[(bs.vintage_date == last.vintage_date) & (bs.period_type.isin(["latest_month", "ytd", "ytd_prior"]))
                 & (~bs.is_final)]
     tbl = latest.pivot_table(index="attribute", columns=["period_type", "grain_class"], values="value_t")
-    st.dataframe(tbl.style.format("{:,.0f}"), use_container_width=True)
+    st.dataframe(tbl.style.format("{:,.0f}"), width="stretch")
