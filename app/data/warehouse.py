@@ -44,3 +44,8 @@ def load_macro_snap() -> pd.DataFrame:
         return _query("SELECT * FROM macro_snap ORDER BY series, date")
     except Exception:  # noqa: BLE001 - table not built yet
         return pd.DataFrame(columns=["series", "date", "value"])
+
+
+@st.cache_data
+def load_signals() -> pd.DataFrame:
+    return _query("SELECT * FROM signals ORDER BY model, grain_class, vintage_date")
