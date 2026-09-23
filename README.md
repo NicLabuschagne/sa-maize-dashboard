@@ -47,6 +47,7 @@ python ingest/build_warehouse.py   # prices + point-in-time balance sheet
 python ingest/fetch_lse.py         # CPI, USD/ZAR, CBOT corn, 10:00 UTC snapshots
 python ingest/build_signals.py     # fitted model output -> signals table
 python ingest/download_sagis.py --weekly && python ingest/build_weekly.py   # weekly deliveries, imports, exports
+python ingest/build_parity.py      # SAGIS import/export parity band (raw files from sagis-historic-information)
 ```
 
 ## Tests
@@ -55,7 +56,7 @@ python ingest/download_sagis.py --weekly && python ingest/build_weekly.py   # we
 python -m pytest -q
 ```
 
-180 tests covering the parsers (including a reconciliation of weekly to monthly SAGIS), the point-in-time joins, the models, the overfitting statistics,
+185 tests covering the parsers (including a reconciliation of weekly to monthly SAGIS), the point-in-time joins, the models, the overfitting statistics,
 the positioning nowcast and a headless render of every page.
 
 ## Optional: the Ask page
