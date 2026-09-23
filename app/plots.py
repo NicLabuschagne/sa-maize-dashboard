@@ -141,3 +141,40 @@ def price_position_flow(px: pd.Series, position: pd.Series, flow_: pd.Series, en
     fig.update_yaxes(tickformat="+.0f", ticksuffix="%", range=[-105, 105], row=2, col=1)
     fig.update_yaxes(tickformat="+.0f", ticksuffix="pp", row=3, col=1)
     return fig
+
+
+def equity_drawdown(curves: pd.DataFrame, legs: list[str], title: str = "", height: int = 520) -> go.Figure:
+    """Growth of 1 for the portfolio (bold) and each leg (thin), with the portfolio drawdown below."""
+    from plotly.subplots import make_subplots
+
+    d = _dark()
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.06, row_heights=[0.72, 0.28],
+                        subplot_titles=("growth of 1", "portfolio drawdown"))
+    leg_colours = [_SLOTS["yellow"][d], _SLOTS["aux"][d], _SLOTS["white"][d], _SLOTS["total"][d], _SLOTS["aux2"][d]]
+    dashes = ["dash", "dot", "dashdot", "longdash", "longdashdot"]
+    for i, name in enumerate(legs):
+        fig.add_trace(go.Scatter(x=curves.index, y=curves[name], name=name, mode="lines",
+                                 line=dict(color=leg_colours[i % 5], width=1.3, dash=dashes[i % 5]),
+                                 hovertemplate="%{y:.3f}x<extra>" + name + "</extra>"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=curves.index, y=curves["Portfolio"], name="Portfolio", mode="lines",
+                             line=dict(color=STATUS["navy"], width=2.5),
+                             hovertemplate="%{y:.3f}x<extra>Portfolio</extra>"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=curves.index, y=curves["drawdown"] * 100, name="drawdown", mode="lines",
+                             line=dict(color=STATUS["bad"], width=1.2), fill="tozeroy",
+                             fillcolor="rgba(220,38,38,0.14)", showlegend=False,
+                             hovertemplate="%{y:.1f}%<extra>drawdown</extra>"), row=2, col=1)
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=15, color=_TEXT[d]), x=0, xanchor="left", y=1.0, yanchor="top",
+                   pad=dict(t=6)),
+        height=height, margin=dict(l=16, r=16, t=86 if title else 56, b=16),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color=_TEXT2[d], size=12),
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="left", x=0, font=dict(size=11)))
+    for ann in fig.layout.annotations:
+        ann.font = dict(size=11, color=_TEXT2[d])
+        ann.x, ann.xanchor = 0, "left"
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(gridcolor=_GRID[d], gridwidth=1, zeroline=False)
+    fig.update_yaxes(tickformat=".2f", ticksuffix="x", row=1, col=1)
+    fig.update_yaxes(ticksuffix="%", tickformat=".0f", row=2, col=1)
+    return fig

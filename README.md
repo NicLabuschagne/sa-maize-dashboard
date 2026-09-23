@@ -13,6 +13,7 @@ analogues and a backtest engine, built on SAGIS balance sheets and JSE futures.
 | **Price** | Front month, calendar spreads, white/yellow premium, forward curve |
 | **Fair Value** | Four models (outright, calendar spread, white premium, import/export parity) with IC tests, tercile tables and stability splits |
 | **Analogues** | Compound state builder, forward-path fans, horizon distributions and a backtest engine with overfitting controls |
+| **Release Fade** | Portfolio backtest of the release-day fade across outright, parity, spread and cross legs: threshold, hold, entry timing, costs, stop, weights; Sortino, Calmar, drawdown and deflated Sharpe |
 | **Positioning** | Trend-model overlay: signal panel, implied flow, validation against CFTC positioning on CBOT corn |
 | **Ask** | Natural-language questions answered by SQL against the warehouse |
 
@@ -56,7 +57,7 @@ python ingest/build_parity.py      # SAGIS import/export parity band (raw files 
 python -m pytest -q
 ```
 
-185 tests covering the parsers (including a reconciliation of weekly to monthly SAGIS), the point-in-time joins, the models, the overfitting statistics,
+193 tests covering the parsers (including a reconciliation of weekly to monthly SAGIS), the point-in-time joins, the models, the overfitting statistics,
 the positioning nowcast and a headless render of every page.
 
 ## Optional: the Ask page
