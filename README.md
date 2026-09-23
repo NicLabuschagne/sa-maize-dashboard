@@ -13,6 +13,7 @@ analogues and a backtest engine, built on SAGIS balance sheets and JSE futures.
 | **Price** | Front month, calendar spreads, white/yellow premium, forward curve |
 | **Fair Value** | Four models (outright, calendar spread, white premium, import/export parity) with IC tests, tercile tables and stability splits |
 | **Analogues** | Compound state builder, forward-path fans, horizon distributions and a backtest engine with overfitting controls |
+| **Positioning** | Trend-model overlay: signal panel, implied flow, validation against CFTC positioning on CBOT corn |
 | **Ask** | Natural-language questions answered by SQL against the warehouse |
 
 ## Method in one paragraph
@@ -53,8 +54,8 @@ python ingest/build_signals.py     # fitted model output -> signals table
 python -m pytest -q
 ```
 
-134 tests covering the parsers, the point-in-time joins, the models, the overfitting statistics and a
-headless render of every page.
+161 tests covering the parsers, the point-in-time joins, the models, the overfitting statistics,
+the positioning nowcast and a headless render of every page.
 
 ## Optional: the Ask page
 

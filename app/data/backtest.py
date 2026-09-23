@@ -152,9 +152,11 @@ def summarise(trades: pd.DataFrame, daily: pd.Series) -> dict:
                 "total_ret": 0.0, "sharpe": np.nan, "sharpe_daily": np.nan,
                 "max_dd": 0.0, "time_in_market": 0.0, "avg_hold": np.nan,
                 "cost_share": np.nan, "skew": np.nan, "kurtosis": np.nan, "n_obs": 0}
-    active = daily[daily != 0]
-    sd = active.std(ddof=1)
-    sr_d = float(active.mean() / sd) if sd and sd > 0 else np.nan
+    # Standard convention: every day from first entry to last exit counts, flat days at zero.
+    # Annualising only the days in the market overstates Sharpe by roughly 1/sqrt(time in market).
+    window = daily.loc[trades.entry_date.min():trades.exit_date.max()]
+    sd = window.std(ddof=1)
+    sr_d = float(window.mean() / sd) if sd and sd > 0 else np.nan
     gross = trades.gross_ret.abs().mean()
     return {
         "n_trades": int(len(trades)),
@@ -165,12 +167,12 @@ def summarise(trades: pd.DataFrame, daily: pd.Series) -> dict:
         "sharpe": float(sr_d * np.sqrt(TRADING_DAYS)) if sr_d == sr_d else np.nan,
         "sharpe_daily": sr_d,
         "max_dd": max_drawdown(daily),
-        "time_in_market": float((daily != 0).mean()),
+        "time_in_market": float((window != 0).mean()),
         "avg_hold": float(trades.held_days.mean()),
         "cost_share": float(trades.cost.mean() / gross) if gross else np.nan,
-        "skew": float(active.skew()) if len(active) > 3 else np.nan,
-        "kurtosis": float(active.kurtosis() + 3) if len(active) > 3 else np.nan,
-        "n_obs": int(len(active)),
+        "skew": float(window.skew()) if len(window) > 3 else np.nan,
+        "kurtosis": float(window.kurtosis() + 3) if len(window) > 3 else np.nan,
+        "n_obs": int(len(window)),
     }
 
 

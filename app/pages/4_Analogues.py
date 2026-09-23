@@ -170,8 +170,10 @@ with c2:
 # ------------------------------------------------------------------ 4. backtest
 st.markdown("---")
 st.markdown("#### 4. Backtest this state")
-st.caption("Fade the dislocation: short when the valuation signal is rich, long when cheap. "
-           "Trades may overlap; the portfolio holds every open trade at equal weight.")
+st.caption("Trades the outright front month, fading the fair-value z (model A): short when rich, "
+           "long when cheap — whichever conditions selected the releases. Trades may overlap; the "
+           "portfolio holds every open trade at equal weight. Sharpe counts every day from first "
+           "entry to last exit, flat days included.")
 
 b1, b2, b3, b4 = st.columns(4)
 bt_h = b1.slider("Holding period (trading days)", 3, 60, 10, 1)

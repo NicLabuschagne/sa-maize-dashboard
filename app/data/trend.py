@@ -34,8 +34,9 @@ def load_cot(symbol: str | None = None) -> pd.DataFrame:
     except Exception:  # noqa: BLE001
         return pd.DataFrame(columns=["symbol", "date", "net_noncomm_pct_oi"])
     try:
-        q = "SELECT * FROM cot" + (f" WHERE symbol = '{symbol}'" if symbol else "") + " ORDER BY date"
-        return con.execute(q).df()
+        if symbol:
+            return con.execute("SELECT * FROM cot WHERE symbol = ? ORDER BY date", [symbol]).df()
+        return con.execute("SELECT * FROM cot ORDER BY date").df()
     except Exception:  # noqa: BLE001 - table absent
         return pd.DataFrame(columns=["symbol", "date", "net_noncomm_pct_oi"])
     finally:
@@ -231,80 +232,88 @@ def flow_state(agg: pd.Series, window: int = FLOW_WINDOW) -> dict:
 
 
 # ----------------------------------------------------------------------------- anchored nowcast
-def anchored_nowcast(agg: pd.Series, cot: pd.DataFrame, col: str = "net_noncomm_pct_oi",
-                     scale: float | None = None) -> pd.DataFrame:
-    """Daily positioning estimate: the last *published* COT level plus model flow since.
+MIN_REPORTS = 26          # half a year of released reports before the map is fitted
+_NOWCAST_COLS = ["model", "model_only", "naive", "anchor_level", "anchor_date",
+                 "days_since_report", "nowcast"]
 
-    The report gives a level as of Tuesday but is only public on Friday, so between releases the
-    official number is stale by three to eight days. Anchoring on the last print and adding the
-    model's implied flow since keeps the level honest while updating every day - and it is strictly
-    point-in-time, because the anchor only changes once `release_date` has passed.
 
-    Returns a daily frame with the anchor, the pure-model path, and the anchored nowcast.
-    """
+def _prepare_cot(cot: pd.DataFrame, col: str) -> pd.DataFrame:
     c = cot.dropna(subset=[col]).copy()
-    for k in ("date", "release_date"):
-        if k in c:
-            c[k] = pd.to_datetime(c[k]).astype("datetime64[ns]")
+    c["date"] = pd.to_datetime(c["date"]).astype("datetime64[ns]")
     # CFTC publishes Tuesday's positions on the Friday. A few rows carry no release date;
     # assume the standard three-day lag rather than discarding them.
-    if "release_date" not in c:
-        c["release_date"] = pd.NaT
-    c["release_date"] = c["release_date"].fillna(c["date"] + pd.Timedelta(days=3))
-    c = c.sort_values("release_date")
+    rd = pd.to_datetime(c["release_date"]) if "release_date" in c else pd.Series(pd.NaT, index=c.index)
+    c["release_date"] = rd.astype("datetime64[ns]").fillna(c["date"] + pd.Timedelta(days=3))
+    return c
 
+
+def anchored_nowcast(agg: pd.Series, cot: pd.DataFrame, col: str = "net_noncomm_pct_oi") -> pd.DataFrame:
+    """Daily positioning estimate, strictly point-in-time.
+
+    The report measures Tuesday and publishes Friday, so the official level is always three to
+    eight days stale. Three estimates are carried, each using only reports released by that day:
+
+      naive       the last published level carried forward - no model at all
+      model_only  a + b * model, with a and b fitted on released reports only
+      nowcast     last published level + b * (model today - model on that report's Tuesday)
+
+    `naive` is the benchmark that matters: positioning is persistent, so the last print is already
+    a good estimate of the next one, and the model earns its place only by beating it.
+    """
+    c = _prepare_cot(cot, col)
     a = agg.dropna()
     a.index = pd.DatetimeIndex(a.index).as_unit("ns")
-    if scale is None:                                    # map model units onto COT units
-        scale = float(c[col].std() / a.std()) if a.std() else 1.0
+    c = pd.merge_asof(c.sort_values("date"),
+                      pd.DataFrame({"d": a.index, "m": a.to_numpy()}).sort_values("d"),
+                      left_on="date", right_on="d", direction="backward",
+                      tolerance=pd.Timedelta("5D")).dropna(subset=["m"])
+    c = c.sort_values("release_date").reset_index(drop=True)
 
-    # model position at each COT measurement date (the Tuesday the level refers to)
-    at_meas = pd.merge_asof(c[["date", "release_date", col]].sort_values("date"),
-                            pd.DataFrame({"d": a.index, "m": a.to_numpy()}).sort_values("d"),
-                            left_on="date", right_on="d", direction="backward",
-                            tolerance=pd.Timedelta("5D")).dropna(subset=["m"])
-
-    # for each day, the most recent report that had actually been released
-    daily = pd.DataFrame({"date": a.index, "model": a.to_numpy()})
-    j = pd.merge_asof(daily.sort_values("date"),
-                      at_meas.rename(columns={"date": "anchor_date", col: "anchor_level",
-                                              "m": "anchor_model"}).sort_values("release_date"),
-                      left_on="date", right_on="release_date", direction="backward")
-    j["nowcast"] = j["anchor_level"] + scale * (j["model"] - j["anchor_model"])
-    j["model_only"] = scale * j["model"]
+    maps = []                             # refit the model -> positioning map as each report lands
+    for i in range(MIN_REPORTS, len(c) + 1):
+        known = c.iloc[:i]
+        slope, icpt = np.polyfit(known["m"], known[col], 1)
+        last = known.iloc[-1]
+        maps.append({"release_date": last["release_date"], "anchor_date": last["date"],
+                     "anchor_level": last[col], "anchor_model": last["m"],
+                     "slope": slope, "intercept": icpt})
+    if not maps:
+        return pd.DataFrame(columns=_NOWCAST_COLS,
+                            index=pd.DatetimeIndex([], name="date").as_unit("ns"))
+    j = pd.merge_asof(pd.DataFrame({"date": a.index, "model": a.to_numpy()}).sort_values("date"),
+                      pd.DataFrame(maps).sort_values("release_date"), left_on="date",
+                      right_on="release_date", direction="backward")
+    j["naive"] = j["anchor_level"]
+    j["model_only"] = j["intercept"] + j["slope"] * j["model"]
+    j["nowcast"] = j["anchor_level"] + j["slope"] * (j["model"] - j["anchor_model"])
     j["days_since_report"] = (j["date"] - j["anchor_date"]).dt.days
-    return j.set_index("date")[["model", "model_only", "anchor_level", "anchor_date",
-                                "days_since_report", "nowcast"]]
+    return j.set_index("date")[_NOWCAST_COLS]
 
 
 def nowcast_scorecard(nowcast: pd.DataFrame, cot: pd.DataFrame,
                       col: str = "net_noncomm_pct_oi") -> dict:
-    """Every Friday the report lands and grades the week's nowcast. This is that scorecard.
+    """Grade each estimate against the level the report eventually published for that Tuesday.
 
-    Compares the nowcast standing just before a release against the level that release reported,
-    and does the same for the pure-model path, so the value of anchoring is visible.
+    The estimate is taken as it stood on the measurement Tuesday, before that report was public,
+    so nothing here sees the answer.
     """
-    c = cot.dropna(subset=[col]).copy()
-    for k in ("date", "release_date"):
-        if k in c:
-            c[k] = pd.to_datetime(c[k]).astype("datetime64[ns]")
-    if "release_date" not in c:
-        c["release_date"] = pd.NaT
-    c["release_date"] = c["release_date"].fillna(c["date"] + pd.Timedelta(days=3))
-    n = nowcast.reset_index()
-    # the estimate standing on the measurement date, before that report was public
+    c = _prepare_cot(cot, col)
+    n = nowcast.dropna(subset=["nowcast"]).reset_index()
     j = pd.merge_asof(c.sort_values("date"), n.sort_values("date"), on="date",
                       direction="backward", tolerance=pd.Timedelta("5D")).dropna(
                           subset=["nowcast", col])
     if len(j) < 30:
         return {"ok": False, "n": len(j)}
-    err_a = (j["nowcast"] - j[col]).abs()
-    err_m = (j["model_only"] - j[col]).abs()
-    sd = float(j[col].std())
+    sd = float(c[col].std())
+    mae = {k: float((j[k] - j[col]).abs().mean()) for k in ("nowcast", "model_only", "naive")}
     return {"ok": True, "n": int(len(j)),
-            "mae_anchored": float(err_a.mean()), "mae_model_only": float(err_m.mean()),
-            "mae_anchored_sd": float(err_a.mean() / sd), "mae_model_only_sd": float(err_m.mean() / sd),
+            "mae_anchored": mae["nowcast"], "mae_model_only": mae["model_only"],
+            "mae_naive": mae["naive"],
+            "mae_anchored_sd": mae["nowcast"] / sd, "mae_model_only_sd": mae["model_only"] / sd,
+            "mae_naive_sd": mae["naive"] / sd,
             "corr_anchored": float(j["nowcast"].corr(j[col])),
             "corr_model_only": float(j["model_only"].corr(j[col])),
-            "improvement": float(1 - err_a.mean() / err_m.mean()),
-            "errors": j[["date", col, "nowcast", "model_only"]]}
+            "corr_naive": float(j["naive"].corr(j[col])),
+            "improvement": float(1 - mae["nowcast"] / mae["model_only"]),
+            "improvement_vs_naive": float(1 - mae["nowcast"] / mae["naive"]),
+            "errors": j[["date", col, "nowcast", "model_only", "naive"]]}

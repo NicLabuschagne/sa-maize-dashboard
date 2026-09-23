@@ -212,3 +212,31 @@ def test_nowcast_scorecard_needs_a_sample() -> None:
     agg = T.aggregate(T.trend_panel(px))
     cot = _cot_from(agg, seed=4).head(10)
     assert T.nowcast_scorecard(T.anchored_nowcast(agg, cot), cot)["ok"] is False
+
+
+def test_nowcast_reports_the_naive_benchmark() -> None:
+    """The last print carried forward is the benchmark the model has to beat."""
+    px = _series(n=1600, drift=0.0004, seed=31)
+    agg = T.aggregate(T.trend_panel(px))
+    cot = _cot_from(agg, noise=0.01, seed=1)
+    cot["net_noncomm_pct_oi"] += 0.07                     # reported positioning need not average zero
+    nc = T.anchored_nowcast(agg, cot)
+    sc = T.nowcast_scorecard(nc, cot)
+    assert {"mae_naive", "improvement_vs_naive", "corr_naive"} <= set(sc)
+    assert (nc.dropna(subset=["anchor_date"]).naive == nc.dropna(subset=["anchor_date"]).anchor_level).all()
+    # an intercept is fitted, so a constant offset cannot bias the model-only estimate
+    assert sc["mae_model_only"] < 0.05
+
+
+def test_nowcast_map_is_fitted_only_on_released_reports() -> None:
+    """Truncating the future must not change any estimate already made - no look-ahead."""
+    px = _series(n=1400, seed=41)
+    agg = T.aggregate(T.trend_panel(px))
+    cot = _cot_from(agg, noise=0.02, seed=6)
+    full = T.anchored_nowcast(agg, cot)
+    cut = cot.iloc[: len(cot) // 2]
+    early = T.anchored_nowcast(agg, cut)
+    last_release = pd.to_datetime(cut.release_date).max()
+    common = full.index[full.index < last_release].intersection(early.index)
+    a, b = full.loc[common, "nowcast"].dropna(), early.loc[common, "nowcast"].dropna()
+    assert len(a) > 100 and np.allclose(a, b.loc[a.index])

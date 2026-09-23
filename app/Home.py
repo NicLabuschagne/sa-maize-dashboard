@@ -55,20 +55,14 @@ table.blot td.grp {{ background:{BAND}; color:{DIM}; text-align:left; font-size:
 """, unsafe_allow_html=True)
 
 @st.cache_data
-def flow_by_symbol() -> dict:
-    """One-week implied trend flow per outright market, for the Flow column."""
-    out = {}
-    for s_ in ("WMAZ", "YMAZ"):
-        agg = TR.aggregate(TR.trend_panel(FV.roll_adjusted_index(derived()["cont"], s_)))
-        st_ = TR.flow_state(agg)
-        if st_:
-            out[s_] = st_
-    return out
+def trend_by_symbol() -> dict:
+    """Aggregate trend-model position per outright market, daily."""
+    return {s_: TR.aggregate(TR.trend_panel(FV.roll_adjusted_index(derived()["cont"], s_)))
+            for s_ in ("WMAZ", "YMAZ")}
 
 
 sig_df = load_signals()
 bs = load_balance_sheet()
-flows = flow_by_symbol()
 releases = sorted(pd.to_datetime(sig_df.vintage_date).unique())
 
 head, pick = st.columns([3, 1])
@@ -85,6 +79,10 @@ rows = build_rows(sig_df, as_of)
 nxt, days = next_release(bs[pd.to_datetime(bs.vintage_date) <= as_of].vintage_date.unique(), today=as_of)
 nxt_txt = f"{nxt:%d %b %Y}" if nxt is not None else "—"
 live = as_of == pd.Timestamp(max(releases))
+# Live board: flow to the latest session. Replay: flow as it stood on the replayed release date,
+# so a 2016 board shows 2016 flow rather than today's.
+flows = {s_: st_ for s_, a_ in trend_by_symbol().items()
+         if (st_ := TR.flow_state(a_ if live else a_.loc[:as_of]))}
 st.caption(f"South Africa · point-in-time supply & demand · "
            f"{'latest release' if live else 'replayed at release'} **{as_of:%d %b %Y}** · "
            f"next release **{nxt_txt}**{f' (in {days} days)' if days is not None else ''} · "

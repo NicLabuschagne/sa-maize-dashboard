@@ -154,3 +154,18 @@ def test_build_mask_multi_ands_conditions() -> None:
     assert both.tolist() == [True, False, False]
     one = AN.build_mask_multi(p, [("z", "high", 1.0)])
     assert one.sum() == 2
+
+
+def test_sharpe_counts_flat_days_in_the_window() -> None:
+    """Regression: annualising only the days in the market overstated Sharpe ~1/sqrt(time in market)."""
+    idx = _index(n=600, drift=0.001, seed=12)
+    r = BT.run_backtest(idx, _entries(idx, [-1.0] * 6, every=90), horizon=5,
+                        costs=BT.CostModel(0, 0, 0))
+    s = r.stats
+    window = r.daily.loc[r.trades.entry_date.min():r.trades.exit_date.max()]
+    assert s["time_in_market"] < 0.2
+    assert s["n_obs"] == len(window)
+    expected = window.mean() / window.std() * np.sqrt(BT.TRADING_DAYS)
+    assert s["sharpe"] == pytest.approx(expected)
+    active = window[window != 0]
+    assert abs(s["sharpe"]) < abs(active.mean() / active.std() * np.sqrt(BT.TRADING_DAYS))

@@ -87,3 +87,21 @@ def test_home_shows_a_flow_column() -> None:
     html = " ".join(m.body for m in at.markdown)
     assert "Flow 1w" in html
     assert "pp" in html, "flow values should be quoted in position points"
+
+
+def test_home_flow_is_point_in_time_on_replay() -> None:
+    """Regression: the Flow column showed today's flow on a replayed 2016 board."""
+    if not DB_PATH.exists():
+        pytest.skip("warehouse not built")
+    import pandas as pd
+
+    at = AppTest.from_file(str(ROOT / "app" / "Home.py"), default_timeout=180).run()
+    live_html = " ".join(m.body for m in at.markdown)
+    target = next(o for o in at.selectbox[0].options if pd.Timestamp(o).strftime("%Y-%m") == "2016-07")
+    at.selectbox[0].set_value(target).run()
+    assert not at.exception
+    replay_html = " ".join(m.body for m in at.markdown)
+    import re
+
+    flows = lambda h: re.findall(r"([+-]\d+)pp</span><span class='unit'>(?:buy|sell)", h)  # noqa: E731
+    assert flows(live_html) != flows(replay_html), "flow did not change with the as-of date"

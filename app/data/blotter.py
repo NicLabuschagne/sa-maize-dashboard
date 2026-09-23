@@ -18,10 +18,10 @@ import pandas as pd
 MARKETS: list[tuple[str, str, str, str, str, str]] = [
     ("White maize", "A", "white", "WMAZ", "SAFEX white, front month", "R/t"),
     ("White maize", "B", "white", "WMAZ 2nd-1st", "Calendar spread", "% ann"),
-    ("White maize", "D", "white", "WMAZ/parity", "vs CBOT import parity", "%"),
+    ("White maize", "D", "white", "WMAZ/parity", "vs CBOT x USD/ZAR parity", "%"),
     ("Yellow maize", "A", "yellow", "YMAZ", "SAFEX yellow, front month", "R/t"),
     ("Yellow maize", "B", "yellow", "YMAZ 2nd-1st", "Calendar spread", "% ann"),
-    ("Yellow maize", "D", "yellow", "YMAZ/parity", "vs CBOT import parity", "%"),
+    ("Yellow maize", "D", "yellow", "YMAZ/parity", "vs CBOT x USD/ZAR parity", "%"),
     ("Cross", "C", "white_vs_yellow", "WMAZ-YMAZ", "White premium over yellow", "% of yellow"),
 ]
 

@@ -217,15 +217,15 @@ if N and N.get("score", {}).get("ok"):
     sc, nc = N["score"], N["nc"]
     st.markdown("##### Nowcast daily, reconcile when the report lands")
     st.caption("Positions are measured on Tuesday and published on Friday, so the official number is "
-               "three to eight days stale. Anchoring on the last published print and adding model "
-               "flow since updates it daily, and stays point-in-time.")
+               "three to eight days stale. Every estimate below uses only reports already released on "
+               "the day it is made. Errors are against the level the next report published.")
     n1, n2, n3, n4 = st.columns(4)
-    n1.metric("Anchored nowcast error", f"{sc['mae_anchored_sd']:.2f} sd", "vs the next print",
+    n1.metric("Anchored nowcast", f"{sc['mae_anchored_sd']:.2f} sd", "last print + model flow",
               delta_color="off")
-    n2.metric("Model-only error", f"{sc['mae_model_only_sd']:.2f} sd", delta_color="off")
-    n3.metric("Improvement from anchoring", f"{sc['improvement']:.0%}")
-    n4.metric("Correlation with the print", f"{sc['corr_anchored']:+.3f}",
-              f"model only {sc['corr_model_only']:+.3f}")
+    n2.metric("Naive: last print carried", f"{sc['mae_naive_sd']:.2f} sd", "no model",
+              delta_color="off")
+    n3.metric("Model only", f"{sc['mae_model_only_sd']:.2f} sd", "no anchor", delta_color="off")
+    n4.metric("Model's gain over naive", f"{sc['improvement_vs_naive']:.0%}")
 
     e = sc["errors"]
     fig = go.Figure()
@@ -236,12 +236,13 @@ if N and N.get("score", {}).get("ok"):
     P.line(fig, e.date, e.model_only * 100, "model only", entity="aux2", width=1.2,
            hover="%{y:+.1f}%<extra>model only</extra>")
     fig.add_hline(y=0, line=dict(color=P.muted(), width=1))
-    P.layout(fig, "What the model said on the Tuesday, against what the report published",
+    P.layout(fig, "What each estimate said on the Tuesday, against what the report published",
              ytitle="net non-commercial, % of open interest", height=340)
     st.plotly_chart(fig, width="stretch")
-    st.caption(f"SAFEX has no report to anchor to, so it sits permanently in the model-only column — "
-               f"{sc['mae_model_only_sd']:.2f} sd, not {sc['mae_anchored_sd']:.2f}. Broker-code data "
-               f"would supply the missing anchor.")
+    st.caption("Positioning is persistent, so the last print alone is already close — the model's "
+               "value between reports is the margin over carrying it forward. SAFEX has no report, so "
+               "none of the anchored columns exist there, nor the map from model to positioning: the "
+               "level is uncalibrated and the direction of flow is the usable part.")
 
 # ---------------------------------------------------------------- does it port
 st.markdown("---")
