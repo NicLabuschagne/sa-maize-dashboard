@@ -46,3 +46,36 @@ A hypothesis counts as an improvement only if **all** of the following hold:
 
 Anything that fails is reported, not dropped. An improvement that passes is then run through the
 backtest with the default SAFEX cost model before it goes anywhere near the dashboard.
+
+---
+
+## Results (appended after the single run — the sections above are unchanged since `81d421f`)
+
+Run: `python research/evaluate_hypotheses.py` → `research/results_hypotheses.csv`
+
+| Product | Signal | Dev IC | Holdout IC | Baseline holdout IC | Holm p | Pass |
+|---|---|---|---|---|---|---|
+| WMAZ | S0 baseline | +0.303 | +0.230 | — | — | — |
+| YMAZ | S0 baseline | +0.185 | +0.203 | — | — | — |
+| WMAZ | H1 news | −0.003 | +0.106 | +0.230 | 1.00 | no |
+| WMAZ | H2 + parity | +0.303 | +0.188 | +0.230 | 0.69 | no |
+| WMAZ | H3 value + momentum | +0.214 | +0.268 | +0.230 | 0.22 | no |
+| WMAZ | H4 Huber | +0.303 | +0.232 | +0.230 | 0.37 | no |
+| YMAZ | H1 news | −0.110 | +0.054 | +0.203 | 1.00 | no |
+| YMAZ | H2 + parity | +0.169 | +0.176 | +0.203 | 0.69 | no |
+| YMAZ | H3 value + momentum | +0.031 | +0.235 | +0.203 | 0.42 | no |
+| YMAZ | H4 Huber | +0.179 | +0.197 | +0.203 | 0.69 | no |
+| WMAZ-YMAZ | H5 pair | +0.135 | +0.050 | +0.217* | 1.00 | no |
+
+\*The pre-registration named no baseline for the pair; the mean of the two outright baselines was
+fixed in the script before the result was read.
+
+**Outcome: no hypothesis meets the decision rule. The dashboard is unchanged.**
+
+- The baseline replicates out of sample: +0.30 → +0.23 on white, +0.19 → +0.20 on yellow. Its IC peaks
+  at 5-10 days and decays with horizon, which is the pattern expected of a real signal, not a leak.
+- H3 (value + momentum) beats the baseline on both products with a stable sign, but by about 0.03-0.04
+  IC against a standard error near 0.12. It is the one candidate worth re-testing as new releases arrive.
+- H4 shows the OLS fit is not being bent by the drought; H2 and H5 confirm the parity and white-yellow
+  information lives in relative legs, not in the outright forecast; H1 finds no edge in the size of
+  the stock surprise itself.
