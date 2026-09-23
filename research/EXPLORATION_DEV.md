@@ -65,7 +65,7 @@ Same fitted fair value, scored every fifth trading day instead of only after rel
    of its IC. The market over- or under-reacts to the SAGIS print and corrects over the following
    5–10 days. That is the effect the model captures, which supports keeping it event-driven.
 3. **Carry adjustment does not help the spread.** SA rates ranged 7–15% over the sample, but the
-   annualised spread's variation around cover is dominated by other things (see below).
+   annualised spread's variation around cover is not driven by the financing rate.
 4. **Sample size is the binding constraint.** About 70 releases per product in development gives an IC
    standard error near 0.12. Specification changes worth +0.05 cannot be seen at that size. Only
    genuinely new *information* is likely to move the IC by enough to show.
