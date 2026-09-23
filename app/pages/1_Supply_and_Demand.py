@@ -8,7 +8,8 @@ import streamlit as st
 
 from app import plots as P
 from app.data import features as F
-from app.state import derived, sidebar
+from app.data import weekly as W
+from app.state import derived, fmt_t, sidebar
 
 st.set_page_config(page_title="S&D Explorer", layout="wide")
 sel = sidebar()
@@ -40,6 +41,29 @@ if not is_ratio:
     n = st.slider("Seasons to show", 3, len(piv.columns), min(10, len(piv.columns)))
     st.plotly_chart(P.season_overlay(piv.iloc[:, -n:], f"{ATTRS[attr]} — season-to-date by marketing year",
                                      entity=cls), width="stretch")
+
+# --- 2b. weekly pace ---------------------------------------------------------------------
+wk = W.load_weekly()
+if len(wk):
+    st.markdown("#### Weekly pace")
+    st.caption("SAGIS weekly: deliveries ~5 days after the Friday week-end, trade ~12. "
+               "Past seasons as finalised.")
+    flow = st.radio("Flow", list(W.FLOWS), format_func=W.FLOWS.get, horizontal=True, key="wk_flow")
+    cum = W.season_to_date(wk, flow, cls)
+    if not cum.empty:
+        pc = W.pace(cum)
+        latest = wk[(wk.flow == flow) & (wk.grain_class == cls) & (wk.season == pc["season"])
+                    & (wk.week == pc["week"])]
+        pct = lambda v: "—" if v != v else f"{v:+.0f}%"  # noqa: E731
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric(f"To week {pc['week']}", fmt_t(pc["to_date"]))
+        m2.metric("vs last season", pct(pc["vs_last_pct"]))
+        m3.metric("vs 5-season avg", pct(pc["vs_avg_pct"]))
+        if len(latest):
+            m4.metric(f"Wk to {latest.week_end.iloc[0]:%d %b}", fmt_t(latest.tons_week.iloc[0]))
+        n_w = st.slider("Seasons to show", 3, len(cum.columns), min(10, len(cum.columns)), key="wk_n")
+        st.plotly_chart(P.season_overlay(cum.iloc[:, -n_w:], f"{W.FLOWS[flow]} — season-to-date by week",
+                                         entity=cls, weekly=True), width="stretch")
 
 # --- 3. revisions ------------------------------------------------------------------------
 if attr not in ("months_cover", "stocks_to_use"):

@@ -64,8 +64,9 @@ def line(fig: go.Figure, x: pd.Series, y: pd.Series, name: str, entity: str | No
 
 
 def season_overlay(piv: pd.DataFrame, title: str, entity: str, ytitle: str = "t",
-                   highlight: int = 2) -> go.Figure:
-    """Columns = seasons, index = marketing-year month. Latest `highlight` seasons in colour, rest muted."""
+                   highlight: int = 2, weekly: bool = False) -> go.Figure:
+    """Columns = seasons, index = marketing-year month (or week if `weekly`).
+    Latest `highlight` seasons in colour, rest muted."""
     fig = go.Figure()
     cols = list(piv.columns)
     months = ["May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"]
@@ -75,10 +76,13 @@ def season_overlay(piv: pd.DataFrame, title: str, entity: str, ytitle: str = "t"
                                  hovertemplate="%{y:,.0f}<extra>" + c + "</extra>"))
     for c, ent in zip(cols[-highlight:], ["aux2", entity][-highlight:]):
         fig.add_trace(go.Scatter(x=piv.index, y=piv[c], name=c, mode="lines+markers",
-                                 line=dict(color=color(ent), width=2.5), marker=dict(size=7),
+                                 line=dict(color=color(ent), width=2.5), marker=dict(size=4 if weekly else 7),
                                  hovertemplate="%{y:,.0f}<extra>" + c + "</extra>"))
     layout(fig, title, ytitle=ytitle)
-    fig.update_xaxes(tickmode="array", tickvals=list(range(1, 13)), ticktext=months)
+    if weekly:      # week 1 ends on the first Friday of May; ~4.35 weeks per month
+        fig.update_xaxes(tickmode="array", tickvals=[1 + 4.35 * i for i in range(12)], ticktext=months)
+    else:
+        fig.update_xaxes(tickmode="array", tickvals=list(range(1, 13)), ticktext=months)
     return fig
 
 
