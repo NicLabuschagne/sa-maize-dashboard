@@ -9,7 +9,7 @@ analogues and a backtest engine, built on SAGIS balance sheets and JSE futures.
 |---|---|
 | **Home** | Desk monitor — market, fair value, deviation and signal per market, replayable at any past release |
 | **Overview** | Cover and price for the selected class |
-| **Supply and Demand** | SAGIS series by release, season-to-date overlays, revision tracking, full release tables |
+| **Supply and Demand** | SAGIS series by release, season-to-date overlays, weekly delivery and trade pace, revision tracking, full release tables |
 | **Price** | Front month, calendar spreads, white/yellow premium, forward curve |
 | **Fair Value** | Four models (outright, calendar spread, white premium, import/export parity) with IC tests, tercile tables and stability splits |
 | **Analogues** | Compound state builder, forward-path fans, horizon distributions and a backtest engine with overfitting controls |
@@ -46,6 +46,7 @@ python ingest/download_sagis.py    # ~350 monthly SAGIS maize releases
 python ingest/build_warehouse.py   # prices + point-in-time balance sheet
 python ingest/fetch_lse.py         # CPI, USD/ZAR, CBOT corn, 10:00 UTC snapshots
 python ingest/build_signals.py     # fitted model output -> signals table
+python ingest/download_sagis.py --weekly && python ingest/build_weekly.py   # weekly deliveries, imports, exports
 ```
 
 ## Tests
@@ -54,7 +55,7 @@ python ingest/build_signals.py     # fitted model output -> signals table
 python -m pytest -q
 ```
 
-161 tests covering the parsers, the point-in-time joins, the models, the overfitting statistics,
+180 tests covering the parsers (including a reconciliation of weekly to monthly SAGIS), the point-in-time joins, the models, the overfitting statistics,
 the positioning nowcast and a headless render of every page.
 
 ## Optional: the Ask page
@@ -66,7 +67,8 @@ account, no network, no cost. To use Claude instead, set `ANTHROPIC_API_KEY` (en
 
 ## Data
 
-- **SAGIS** — South African Grain Information Service, monthly maize supply & demand, public.
+- **SAGIS** — South African Grain Information Service, monthly maize supply & demand and weekly
+  producer deliveries / RSA imports and exports, public.
 - **JSE / SAFEX** — physically settled grain futures. Raw workbooks are **not** redistributed here;
   only derived series in the warehouse.
 - **London Strategic Edge** — CBOT corn, USD/ZAR, South African CPI.
