@@ -87,3 +87,41 @@ cost model before it touches the dashboard.
   small relative to stocks.
 - Not tested here: using weekly data to trade *between* monthly releases. That changes the event set,
   so it is not comparable to these baselines. It would need its own pre-registration.
+
+---
+
+## Results (appended after the single run; the sections above are unchanged since `28ebf0c`)
+
+Run: `python research/evaluate_weekly.py` → `research/results_weekly.csv`
+
+| Model | Hypothesis | Dev IC | Holdout IC | Baseline holdout IC | Raw p | Holm p | Pass |
+|---|---|---|---|---|---|---|---|
+| A WMAZ | W1 nowcast | +0.293 | +0.217 | +0.230 | 0.07 | 0.66 | no |
+| A WMAZ | W2 export pace | +0.167 | **+0.303** | +0.230 | 0.01 | 0.14 | no |
+| A YMAZ | W1 nowcast | +0.196 | +0.209 | +0.203 | 0.11 | 0.86 | no |
+| A YMAZ | W2 export pace | +0.245 | **+0.257** | +0.203 | 0.04 | 0.42 | no |
+| B WMAZ | W1 nowcast | +0.094 | +0.048 | +0.030 | 0.67 | 1.00 | no |
+| B WMAZ | W2 export pace | +0.312 | −0.009 | +0.030 | 0.93 | 1.00 | no |
+| B YMAZ | W1 nowcast | +0.189 | −0.027 | −0.076 | 0.82 | 1.00 | no |
+| B YMAZ | W2 export pace | +0.181 | −0.125 | −0.076 | 0.26 | 1.00 | no |
+| C premium | W1 nowcast | +0.078 | +0.167 | +0.153 | 0.10 | 0.86 | no |
+| C premium | W2 export pace | +0.014 | +0.006 | +0.153 | 0.95 | 1.00 | no |
+| D YMAZ parity | W1 nowcast | +0.188 | +0.160 | +0.146 | 0.12 | 0.86 | no |
+| D YMAZ parity | W2 export pace | +0.204 | +0.121 | +0.146 | 0.23 | 1.00 | no |
+
+**Outcome: no hypothesis meets the decision rule. The models are unchanged.**
+
+- **W1 (nowcast cover)** is a wash. It moves the holdout IC by −0.01 to +0.05 and never significantly.
+  About two weeks of trade are published by release day. Off-season that trims stock by about 5%; it
+  matters only at harvest, when deliveries arrive faster than the monthly figure shows. Stock levels
+  change slowly, so the monthly figure is not stale enough for the update to change the ranking.
+- **W2 (export pace)** is the one real candidate, and only for the **outright**. It raises the holdout IC
+  on both classes (white +0.23 → +0.30, yellow +0.20 → +0.26) with a stable sign, and the raw p-values
+  are 0.01 and 0.04. It fails the Holm correction across 12 tests. On spreads, the premium and the
+  parity basis it adds noise or hurts. Export demand shows up in the outright price, not in the
+  relative legs.
+- **B (calendar spread)** has no holdout edge with or without weekly data. Its baseline holdout IC is
+  about zero.
+- As with H3 (value + momentum) in the first pre-registration, W2 on the outright should be
+  re-tested on releases after this date, as a single pre-specified test with no multiple-testing
+  penalty.
