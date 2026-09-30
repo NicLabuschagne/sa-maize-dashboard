@@ -6,9 +6,9 @@
 - The fair-position model describes where yellow sits in the band (OOS R² ≈ 0.2, including
   2023–26). Its gap does not predict 5–40-day moves (round 2).
 - A market-revealed export floor was tried twice (Addenda 2 and 3). Both pre-registered rules
-  select B0, which is loose, not accurate (below). No floor has passed every economic test. The edge
-  trading test (export side, yellow, arb return) has **not** been run, and no forward return has been
-  computed for any band.
+  select B0, which is loose, not accurate (below). No floor has passed every economic test.
+- The edge trading test was run on B2 at the user's request (Addendum 4). No signal passes, and the
+  desk rule on B2 loses (yellow Sharpe −0.58), because B2 follows price.
 
 **Next steps when resumed**
 1. B2s leaks upward in deficit seasons through many small updates. Candidate fix: allow upward
