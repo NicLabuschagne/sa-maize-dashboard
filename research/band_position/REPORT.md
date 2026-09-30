@@ -18,6 +18,54 @@
 3. Then the edge trading test, pre-registered as in the Addendum 2/3 discussion: yellow, export zone
    within $10 of the floor, 20-day arb return, three gap signals, the desk rule as benchmark.
 
+## Edge trading test on B2 (Addendum 4, user's choice of band)
+
+Run: `python -m research.band_position.run_edge` (1 run; outputs in `output/edge/`). B2 failed the
+pre-registered import-season test; it was used at the user's request, so every result here is
+conditional on a floor known to follow price.
+
+**Pre-registered IC tests (yellow, export zone, 20-day arb return): no signal passes.**
+
+| Signal | Dev IC | Holdout IC | Holdout NW t | Holm p |
+|---|---|---|---|---|
+| S1 detrended gap | −0.04 | −0.11 | −0.79 | 0.87 |
+| S2 raw gap | −0.03 | −0.20 | −1.46 | 0.43 |
+| S3 unpriced fair move | +0.02 | −0.07 | −0.56 | 0.87 |
+| *Benchmark: mean reversion* | −0.15 | −0.23 | −2.02 | — |
+
+Holdout effective N = 27 (25 zone entries); full sample 86 (80 entries). The import zone never
+occurred for yellow on B2, because the ceiling (floor + cost width) sits above price whenever the
+floor follows price.
+
+**Backtests (net of dashboard costs, May 2015 – Sep 2026, yellow)**
+
+| Rule | Ann. return | Sharpe | Max DD (log) | Time in market | Entries | Hit rate / trade |
+|---|---|---|---|---|---|---|
+| T0 desk rule | −10.2% | −0.58 | −1.27 | 62% | 80 | 58% |
+| T1 zone & S1 > 0 | −9.1% | −0.60 | −1.07 | 39% | 115 | 50% |
+| T2 zone & S2 > 0 | −9.1% | −0.56 | −1.16 | 51% | 112 | 53% |
+| T3 zone & S3 > 0 | −7.6% | −0.58 | −0.95 | 37% | 145 | 57% |
+
+Holdout (2023–26) Sharpe: T0 −0.46, T1 −0.43, T2 −0.36, T3 −0.48. Deflated Sharpe 0.02–0.03 for all
+(5 trials). White is about flat: T0 Sharpe −0.07 overall and +0.38 in the holdout, not tested.
+
+**Why it fails (diagnostics, labelled post hoc)**
+- **The zone isn't selective.** SAFEX is within $10 of the B2 floor on 62% of days, because B2
+  follows price.
+- **The zone picks the wrong moments.** Long the arb on every day loses 5.5%/yr (the yellow basis
+  fell from +0.50 in 2016 to −0.05 in 2023). Inside the B2 zone the loss almost doubles. A floor that
+  follows price down flags falling markets, and they kept falling: the mean-reversion benchmark IC
+  in the zone is −0.18 (t −2.7), i.e. momentum, not reversion.
+- **About half the loss is one episode.** Early 2017, the post-drought record crop collapsed the
+  basis from about +0.5 to +0.1.
+- **The CBOT continuation has roll gaps.** 22 of 72 daily moves above 5% are in July. Zeroing those
+  days barely changes yellow T0 (−10.2% → −9.8%/yr), so they are not the cause.
+
+**Reading.** This does not show that the desk's export-parity arb fails. It shows that a floor
+learnt from price (B2) can't stand in for a paper calculation: it moves with price and removes the
+anchor the trade relies on. A fair test of the desk rule needs a floor that stays put when price
+falls without exports (the B2s leak fix), or a real cost-stack export parity.
+
 ## Band choice, second attempt (Addendum 3)
 
 Run: `python -m research.band_position.run_bands` (3 runs logged in `output/bands/variants_log.csv`:

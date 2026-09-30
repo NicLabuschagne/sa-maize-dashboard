@@ -321,3 +321,40 @@ def test_border_baseline_uses_first_published_months_only() -> None:
     baseline = revealed.border_baseline(balance_sheet, "yellow", dates)
     assert np.isnan(baseline.iloc[0])                     # fewer than 9 months published by then
     assert baseline.iloc[1] == pytest.approx(12.0)        # 12 x 52 180 t / 52.18 weeks = 12 kt/week
+
+
+# ----------------------------------------------------------------------------- addendum 4: edge test
+from research.band_position import edge_test  # noqa: E402
+from app.data.backtest import CostModel  # noqa: E402
+
+
+def _edge_frame(n: int = 10) -> pd.DataFrame:
+    return pd.DataFrame({"date": pd.bdate_range("2020-01-01", periods=n), "arb_ret": np.full(n, 0.01),
+                         "usdzar": 15.0, "safex": 3000.0, "roll_day": False})
+
+
+def test_backtest_earns_from_the_day_after_execution() -> None:
+    frame = _edge_frame()
+    target = pd.Series([0, 0, 1, 1, 1, 0, 0, 0, 0, 0], dtype=float)   # decided at closes 2, 3, 4
+    daily = edge_test.backtest_rule(frame, target, CostModel())
+    # traded at closes 3–5, so it earns the returns of days 4, 5, 6
+    assert daily["held"].tolist() == [0, 0, 0, 0, 1, 1, 1, 0, 0, 0]
+    assert daily["gross"].sum() == pytest.approx(0.03)
+
+
+def test_backtest_charges_entry_exit_and_rolls() -> None:
+    frame = _edge_frame()
+    frame.loc[5, "roll_day"] = True
+    target = pd.Series([0, 0, 1, 1, 1, 0, 0, 0, 0, 0], dtype=float)
+    costs = CostModel()
+    daily = edge_test.backtest_rule(frame, target, costs)
+    one_way = (costs.one_way_r_t + 0.25 * 15.0) / 3000.0
+    assert daily.loc[3, "cost"] == pytest.approx(one_way)            # entry at close 3
+    assert daily.loc[6, "cost"] == pytest.approx(one_way)            # exit at close 6
+    assert daily.loc[5, "cost"] == pytest.approx(costs.round_trip_r_t / 3000.0)   # roll while held
+    assert daily["cost"].sum() == pytest.approx(2 * one_way + costs.round_trip_r_t / 3000.0)
+
+
+def test_holm_and_spell_count() -> None:
+    assert edge_test.holm([0.01, 0.04, 0.03]) == pytest.approx([0.03, 0.06, 0.06])
+    assert edge_test.spell_count(pd.Series([False, True, True, False, True])) == 2

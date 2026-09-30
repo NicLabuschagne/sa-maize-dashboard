@@ -1,0 +1,49 @@
+signal,zone,start,end,n,effective_n,ic,nw_t,p_value,zone_spells,grain_class,period
+S1 detrended gap,export_zone,2015-05-01,2026-09-30,1722,86.1,-0.05888672392946245,-0.7493517892551905,0.4536452006784468,80,yellow,full
+S2 raw gap,export_zone,2015-05-01,2026-09-30,1730,86.5,-0.08706633920408684,-1.1226085666423606,0.261603775462657,80,yellow,full
+S3 unpriced fair move,export_zone,2015-05-01,2026-09-30,1730,86.5,-0.010574336970058997,-0.14782869395671955,0.8824779636237687,80,yellow,full
+benchmark (mean reversion),export_zone,2015-05-01,2026-09-30,1730,86.5,-0.18227194289113546,-2.7168682364609973,0.006590283857225655,80,yellow,full
+S1 detrended gap,import_zone,2015-05-01,2026-09-30,0,0.0,,,,0,yellow,full
+S2 raw gap,import_zone,2015-05-01,2026-09-30,0,0.0,,,,0,yellow,full
+S3 unpriced fair move,import_zone,2015-05-01,2026-09-30,0,0.0,,,,0,yellow,full
+benchmark (mean reversion),import_zone,2015-05-01,2026-09-30,0,0.0,,,,0,yellow,full
+S1 detrended gap,export_zone,2015-05-01,2022-12-31,1181,59.05,-0.043555206715523535,-0.4572815510471201,0.6474686884814047,56,yellow,development
+S2 raw gap,export_zone,2015-05-01,2022-12-31,1189,59.45,-0.0321546025449454,-0.339979785906086,0.733871750695357,56,yellow,development
+S3 unpriced fair move,export_zone,2015-05-01,2022-12-31,1189,59.45,0.020243347740503036,0.22786175947647214,0.8197537122153413,56,yellow,development
+benchmark (mean reversion),export_zone,2015-05-01,2022-12-31,1189,59.45,-0.1448470042246325,-1.7276501718497284,0.08405096197635398,56,yellow,development
+S1 detrended gap,import_zone,2015-05-01,2022-12-31,0,0.0,,,,0,yellow,development
+S2 raw gap,import_zone,2015-05-01,2022-12-31,0,0.0,,,,0,yellow,development
+S3 unpriced fair move,import_zone,2015-05-01,2022-12-31,0,0.0,,,,0,yellow,development
+benchmark (mean reversion),import_zone,2015-05-01,2022-12-31,0,0.0,,,,0,yellow,development
+S1 detrended gap,export_zone,2023-01-01,2026-09-30,541,27.05,-0.10811300349602387,-0.7849483117450194,0.4324838746345858,25,yellow,holdout
+S2 raw gap,export_zone,2023-01-01,2026-09-30,541,27.05,-0.19963895387567554,-1.4605829057883348,0.1441299402984616,25,yellow,holdout
+S3 unpriced fair move,export_zone,2023-01-01,2026-09-30,541,27.05,-0.06745385938147735,-0.5563044173636036,0.5780027678951907,25,yellow,holdout
+benchmark (mean reversion),export_zone,2023-01-01,2026-09-30,541,27.05,-0.22995417200013035,-2.02282046177245,0.04309166127170351,25,yellow,holdout
+S1 detrended gap,import_zone,2023-01-01,2026-09-30,0,0.0,,,,0,yellow,holdout
+S2 raw gap,import_zone,2023-01-01,2026-09-30,0,0.0,,,,0,yellow,holdout
+S3 unpriced fair move,import_zone,2023-01-01,2026-09-30,0,0.0,,,,0,yellow,holdout
+benchmark (mean reversion),import_zone,2023-01-01,2026-09-30,0,0.0,,,,0,yellow,holdout
+S1 detrended gap,export_zone,2015-05-01,2026-09-30,1527,76.35,-0.06546283466937687,-0.7821004545261528,0.43415553965152354,113,white,full
+S2 raw gap,export_zone,2015-05-01,2026-09-30,1619,80.95,-0.09715902556559433,-1.2715395885568883,0.20353675290160622,113,white,full
+S3 unpriced fair move,export_zone,2015-05-01,2026-09-30,1614,80.7,-0.005211205230249283,-0.06733462142020634,0.9463153155134891,113,white,full
+benchmark (mean reversion),export_zone,2015-05-01,2026-09-30,1619,80.95,-0.15854328168251747,-2.184200625792925,0.028947508972411592,113,white,full
+S1 detrended gap,import_zone,2015-05-01,2026-09-30,0,0.0,,,,1,white,full
+S2 raw gap,import_zone,2015-05-01,2026-09-30,2,0.1,,,,1,white,full
+S3 unpriced fair move,import_zone,2015-05-01,2026-09-30,2,0.1,,,,1,white,full
+benchmark (mean reversion),import_zone,2015-05-01,2026-09-30,2,0.1,,,,1,white,full
+S1 detrended gap,export_zone,2015-05-01,2022-12-31,1027,51.35,-0.03470521021725537,-0.3412914566536774,0.7328841788448119,78,white,development
+S2 raw gap,export_zone,2015-05-01,2022-12-31,1119,55.95,-0.03095763657129703,-0.3310767467164394,0.7405865155281328,78,white,development
+S3 unpriced fair move,export_zone,2015-05-01,2022-12-31,1114,55.7,0.012792348538476208,0.13639588760510424,0.8915083245137436,78,white,development
+benchmark (mean reversion),export_zone,2015-05-01,2022-12-31,1119,55.95,-0.14863880897455312,-1.6324778991733135,0.10257885055216527,78,white,development
+S1 detrended gap,import_zone,2015-05-01,2022-12-31,0,0.0,,,,1,white,development
+S2 raw gap,import_zone,2015-05-01,2022-12-31,2,0.1,,,,1,white,development
+S3 unpriced fair move,import_zone,2015-05-01,2022-12-31,2,0.1,,,,1,white,development
+benchmark (mean reversion),import_zone,2015-05-01,2022-12-31,2,0.1,,,,1,white,development
+S1 detrended gap,export_zone,2023-01-01,2026-09-30,500,25.0,-0.13153627014508054,-0.9652269404205663,0.33443115603078566,36,white,holdout
+S2 raw gap,export_zone,2023-01-01,2026-09-30,500,25.0,-0.22134846939387756,-1.7132995668567155,0.08665744204618797,36,white,holdout
+S3 unpriced fair move,export_zone,2023-01-01,2026-09-30,500,25.0,-0.02800206400825603,-0.21715451360117136,0.8280879316979762,36,white,holdout
+benchmark (mean reversion),export_zone,2023-01-01,2026-09-30,500,25.0,-0.19983555134220535,-1.602161663223667,0.10911986513348415,36,white,holdout
+S1 detrended gap,import_zone,2023-01-01,2026-09-30,0,0.0,,,,0,white,holdout
+S2 raw gap,import_zone,2023-01-01,2026-09-30,0,0.0,,,,0,white,holdout
+S3 unpriced fair move,import_zone,2023-01-01,2026-09-30,0,0.0,,,,0,white,holdout
+benchmark (mean reversion),import_zone,2023-01-01,2026-09-30,0,0.0,,,,0,white,holdout
