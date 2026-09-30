@@ -226,6 +226,50 @@ Monthly flows for evaluation use each month's latest published values (ex post, 
 candidates, choose the lowest C2′ for yellow. If none is eligible, no band is adopted and the study
 is parked with that result.
 
+## Addendum 4: edge trading test on the B2 band (user's choice)
+
+**Band: B2 (Kalman, total weekly exports), as built under Addendum 2.** This was chosen by the
+user. It did *not* pass the pre-registered band criteria: it fails the import-season test (C5),
+because it rises with price in deficit seasons. Results are conditional on that choice.
+
+**Fair position.** The primary model (linear, `stu_domestic_nowcast`, 2 seasonal harmonics) is refit
+on B2 band positions. Weekly expanding fits use all history from 2009, and the first out-of-sample
+week is 1 May 2015. It is applied daily from the previous week's fit. Gap g = fair position −
+B2 position.
+
+**Zones** (known at the close on day d):
+- Export zone: (SAFEX − B2 floor) ÷ USD/ZAR ≤ $10.
+- Import zone: (B2 ceiling − SAFEX) ÷ USD/ZAR ≤ $10, where ceiling = floor + cost width.
+
+**Signals** (positive = cheap):
+- S1 detrended gap: g minus its mean over the prior 250 trading days (at least 200).
+- S2 raw gap: g.
+- S3 unpriced fair move: g − g 20 trading days earlier.
+- Benchmark: expanding mean B2 position − B2 position.
+
+**Outcome.** The 20-day arb log return: SAFEX roll-adjusted front minus CBOT × USD/ZAR (10:00 UTC),
+from the close on d + 1 to d + 21.
+
+**IC tests (decisive).**
+- Sample: yellow, export zone.
+- Three tests (S1–S3): Spearman IC, Newey-West t with lags 19, effective N = n / 20, plus the
+  count of zone spells.
+- Development: May 2015 – Dec 2022. Holdout: Jan 2023 – Sep 2026.
+- A signal passes if the holdout IC is > 0 with a two-sided Holm-adjusted p < 0.05 across the 3,
+  the development IC is > 0, and the holdout IC is above the benchmark's in the same zone.
+- White and the import zone are reported, not tested.
+
+**Backtests (descriptive, not a pass criterion).** One unit of the arb, daily. The position decided
+at the close on d is held from the close on d + 1.
+- T0 desk rule: long the arb while in the export zone.
+- T1 / T2 / T3: long the arb while in the export zone *and* S1 / S2 / S3 > 0.
+- T4: short the arb while in the import zone.
+- Costs: the dashboard `CostModel` SAFEX round trip (R10.60/t) on every entry, exit and roll held,
+  plus $0.50/t round trip for the CBOT leg.
+- Reported for full, development and holdout: annualised return, volatility, Sharpe (all days
+  from first entry, flat days at zero), max drawdown, time in market, entries, hit rate per
+  entry. Deflated Sharpe uses the dashboard function with 5 trials.
+
 ## Known limitations, stated in advance
 
 - The band edges are implied from SAFEX's own history. Early in the sample, the import edge has not
