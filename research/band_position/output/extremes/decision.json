@@ -1,0 +1,9 @@
+{
+  "checks": {
+    "development: confirmed > not confirmed": false,
+    "holdout: confirmed > not confirmed": false,
+    "holdout: confirmed mean > 0": false
+  },
+  "gap_adds_value": false,
+  "runs_logged": 1
+}

@@ -358,3 +358,37 @@ def test_backtest_charges_entry_exit_and_rolls() -> None:
 def test_holm_and_spell_count() -> None:
     assert edge_test.holm([0.01, 0.04, 0.03]) == pytest.approx([0.03, 0.06, 0.06])
     assert edge_test.spell_count(pd.Series([False, True, True, False, True])) == 2
+
+
+# ----------------------------------------------------------------------------- addendum 5: extremes
+from research.band_position import extremes  # noqa: E402
+
+
+def _extreme_frame(position: list[float], fair: float = 0.5) -> pd.DataFrame:
+    n = len(position)
+    frame = pd.DataFrame({"date": pd.bdate_range("2020-01-01", periods=n), "position": position,
+                          "fair_position": fair, "export_edge": 1000.0, "band_width": 1000.0,
+                          "arb_ret": 0.01, "safex_ret": 0.02})
+    frame["gap"] = frame["fair_position"] - frame["position"]
+    frame["safex"] = frame["export_edge"] + frame["position"] * frame["band_width"]
+    return frame
+
+
+def test_long_events_need_rearming_and_are_classified_by_gap() -> None:
+    frame = _extreme_frame([0.3, 0.05, 0.15, 0.05, 0.25, 0.05])
+    events = extremes.find_events(frame, "long")
+    # second dip (row 3) is ignored: position never got back above 0.2 in between
+    assert events["row"].tolist() == [1, 5]
+    assert events["confirmed"].all()                 # gap 0.45 >= 0.2
+    frame["fair_position"] = 0.1
+    frame["gap"] = frame["fair_position"] - frame["position"]
+    assert not extremes.find_events(frame, "long")["confirmed"].any()
+
+
+def test_short_outcomes_are_sign_adjusted_and_position_change_is_split() -> None:
+    frame = _extreme_frame([0.5, 0.95] + [0.95] * 70)
+    events = extremes.find_events(frame, "short")
+    out = extremes.event_outcomes(frame, events)
+    assert out["fwd_arb_20"].iloc[0] == pytest.approx(-0.20)       # arb rose 1%/day; short loses
+    assert out["position_change_20"].iloc[0] == pytest.approx(0.0)
+    assert out["from_safex_20"].iloc[0] + out["from_edges_20"].iloc[0] == pytest.approx(out["position_change_20"].iloc[0])

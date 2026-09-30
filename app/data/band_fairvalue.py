@@ -135,16 +135,16 @@ def design(frame: pd.DataFrame) -> np.ndarray:
     return np.column_stack([np.ones(len(frame)), season_terms(frame["date"]), frame["stu_domestic_nowcast"].to_numpy()])
 
 
-def first_fit_date(band_start: pd.Timestamp) -> pd.Timestamp:
-    """The first 1 May preceded by `MIN_SEASONS` complete marketing years of band history."""
+def first_fit_date(band_start: pd.Timestamp, min_seasons: int = MIN_SEASONS) -> pd.Timestamp:
+    """The first 1 May preceded by `min_seasons` complete marketing years of band history."""
     year = band_start.year - (band_start.month < 5)
     first_full = pd.Timestamp(f"{year}-05-01")
     if first_full < band_start:
         first_full += pd.DateOffset(years=1)
-    return first_full + pd.DateOffset(years=MIN_SEASONS)
+    return first_full + pd.DateOffset(years=min_seasons)
 
 
-def fair_value_daily(frame: pd.DataFrame) -> pd.DataFrame:
+def fair_value_daily(frame: pd.DataFrame, min_seasons: int = MIN_SEASONS) -> pd.DataFrame:
     """Out-of-sample fair position for every day from the first fit date.
 
     Weekly snapshots (the last trading day of each week) are the fitting sample, so slow-moving stocks
@@ -155,7 +155,7 @@ def fair_value_daily(frame: pd.DataFrame) -> pd.DataFrame:
     week = frame["date"].dt.to_period("W-FRI")
     snaps = frame[frame["position"].notna()].groupby(week[frame["position"].notna()]).tail(1)
     snaps = snaps[snaps["stu_domestic_nowcast"] > 0].reset_index(drop=True)
-    start = first_fit_date(frame.loc[frame["position"].notna(), "date"].min())
+    start = first_fit_date(frame.loc[frame["position"].notna(), "date"].min(), min_seasons)
     fair, naive, slope = (np.full(len(frame), np.nan) for _ in range(3))
     snap_weeks = snaps["date"].dt.to_period("W-FRI")
     for t in np.flatnonzero(snaps["date"] >= start):
@@ -175,11 +175,11 @@ def fair_value_daily(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def build(cont: pd.DataFrame, snap: pd.DataFrame, parity: pd.DataFrame, sd: pd.DataFrame, weekly: pd.DataFrame,
-          grain_class: str, symbol: str) -> pd.DataFrame:
+          grain_class: str, symbol: str, min_seasons: int = MIN_SEASONS) -> pd.DataFrame:
     """Full daily frame for one class: band, stocks-to-use nowcast and out-of-sample fair value."""
     frame = band_frame(cont, snap, parity, symbol)
     frame = frame.merge(stocks_to_use_daily(sd, weekly, grain_class, frame["date"]), on="date", how="left")
-    return fair_value_daily(frame)
+    return fair_value_daily(frame, min_seasons)
 
 
 def out_of_sample_scores(daily: pd.DataFrame, windows: dict[str, tuple[str, str]]) -> pd.DataFrame:

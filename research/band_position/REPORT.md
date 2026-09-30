@@ -24,6 +24,42 @@ That moved the Release Fade default portfolio from Sharpe 1.05 / max DD −7.64%
 3. Then the edge trading test, pre-registered as in the Addendum 2/3 discussion: yellow, export zone
    within $10 of the floor, 20-day arb return, three gap signals, the desk rule as benchmark.
 
+## Band extremes with and without the fundamental gap (Addendum 5)
+
+Run: `python -m research.band_position.run_extremes` (1 run; outputs and `events_*.png` in
+`output/extremes/`). Tested on the dashboard's band and fair position, first fit May 2015.
+
+**Yellow had only 7 events in 11 years:** 4 long (Mar 2021, Feb 2022, Apr 2022, Feb 2023) and
+3 short (Apr 2024, Jul 2024, Jul 2025). The pre-registered rule returns "gap adds value: false",
+but the honest reading is **untestable**, not rejected:
+- **Every long event was "confirmed".** The gap was +0.24 to +0.39 at each. The fair position ranges
+  about 0.25–0.85 and is rarely near 0, because an R² ≈ 0.2 model's predictions are pulled toward the
+  average. So whenever price reaches the export extreme, the gap is large and positive almost by
+  construction. The confirmation filter restates "price is at the edge" and cannot separate events.
+- There was no not-confirmed long event to compare, and one not-confirmed short.
+
+| Yellow, 40-day arb return | Events | Mean | Hit rate |
+|---|---|---|---|
+| Long at export extreme (all confirmed) | 4 | −6.2% | 25% |
+| Short at import extreme, confirmed | 2 | +3.7% | 50% |
+| Short at import extreme, not confirmed | 1 | +22.2% | 100% |
+
+- **The Feb 2023 long** (the "bounce off 0" visible on the page): −13.6% at 40 days and −10.4% at
+  60. Position went on to −0.27 before turning. The bounce is real on the chart, but it came after a
+  further two months of falling.
+- **White:** 3 long events, all confirmed, −7.3% mean at 40 days. 3 shorts, +4.0%.
+- **Gap IC on all long-zone days:** −0.22 in development, +0.84 in the holdout. That's a sign flip,
+  on 158 days that amount to about 4 independent 40-day windows. Not informative.
+- **No events before 2021 for yellow.** Position started the sample above 1 (2015/16, already in the
+  zone, so no crossing) and bottomed around 0.12–0.2 in 2017–18, not below 0.1.
+
+**Reading.** The band and fair-position plots are a useful macro picture: where SAFEX sits between
+parity extremes, and where fundamentals would put it. But the data can't support trading turns at the
+extremes: 7 events, mixed results, and a confirmation measure that doesn't discriminate at the
+export edge. A measure that could separate events would have to use the fair position's *level*
+(e.g. fair in the top half while price is at the floor), not the gap. That would be a new
+pre-registered test on future events.
+
 ## Edge trading test on B2 (Addendum 4, user's choice of band)
 
 Run: `python -m research.band_position.run_edge` (1 run; outputs in `output/edge/`). B2 failed the
