@@ -140,6 +140,56 @@ and is labelled as such.
   2023–2026.
 - This is a first look at tradeability, not a strategy. No thresholds, no costs.
 
+## Addendum 2 (before any band in this section is built): choosing the band without returns
+
+Round 2 showed the pooled fair-value gap does not predict. The desk view (edges only, export
+side long, no trustworthy paper calculation) motivates a better **export floor**. The band is chosen
+here on economic criteria only. No forward return is computed until the band is fixed.
+
+**Out-of-sample start for everything that follows: 1 May 2015** (the pre-registered 3-season window),
+so the 2015/16 drought is inside the sample. Chosen for sample size before any edge result was seen.
+
+### Candidate bands (per class, with its own basis and its own weekly trade flows)
+
+Notation: W = CBOT × USD/ZAR in R/t at 10:00 UTC; C = SAGIS export deductions (Gulf FOB in rand −
+export realisation at Randfontein: rail, port, financing), latest by `available_date`; cost width =
+SAGIS import − export at Randfontein (freight, insurance, port, rail both ways; the Gulf FOB cancels).
+All three candidates use **ceiling = floor + cost width**.
+
+- **B0 expanding (round 2):** floor = W × exp(5th percentile of all prior basis).
+- **B1 season rule:** floor basis = 10th percentile of daily basis over the harvest window (1 May –
+  31 Jul) of a season, accepted only if that season's weekly exports for weeks ending by 31 Jul exceed
+  imports for the same weeks. It is usable from the publication date of the last July week. Otherwise
+  the last accepted floor carries on. Floor = W × exp(floor basis).
+- **B2 Kalman:** latent state s = log competitiveness factor, with observation
+  z = log((SAFEX + C) / W), so that floor = W × exp(s) − C.
+  - Each trading day, predict: P += q_within; on the first trading day of each marketing year,
+    P += q_season.
+  - Export pace e = mean weekly exports (kt) over the latest 4 weeks published by that day;
+    weight w = clip((e − 5) / (30 − 5), 0, 1).
+  - Update when z < s (price below the floor), variance r_below², regardless of pace. Update when
+    z ≥ s, variance r_above² / w, only if w > 0. Otherwise no update.
+  - Floor on day t uses the state *before* day t's observation.
+  - Initialise at the first observation with P = 0.3².
+  - **Settings fixed by prior, not estimated:** daily drift sd 0.002 (≈ 3%/yr), season jump sd 0.15
+    (the 2021/22 move was 0.24), r_below 0.02, r_above 0.05. (Changed from "estimated on pre-2015 data":
+    the one-sided filter has no proper likelihood, and pre-2015 has 6 seasons.) A season jump sd of
+    0.075 and 0.30 is reported as sensitivity, never chosen.
+
+### Criteria (evaluation window 1 May 2015 – 30 Sep 2026; yellow decides, white reported)
+
+- **C1 below floor:** share of days with SAFEX < floor, and the longest spell (trading days).
+- **C2 calibration:** in *strong export weeks* (that class's actual exports that week ≥ 30 kt, by
+  week end; ex-post, evaluation only), the median |SAFEX − floor| in USD/t, plus the median signed
+  distance.
+- **C3 speed:** for each season with full-season exports > imports, the weeks from 1 May until the
+  floor stays within $10/t of its 31 October value through 31 October. Median across seasons.
+- **C4 point in time:** truncation test at 50 dates, exact to 1e-9.
+
+**Decision rule:** among candidates that pass C4 and have C1 share ≤ 10%, choose the lowest C2
+median |distance| for yellow. C3 is reported. No other band is built. The edge trading test gets its
+own addendum after the band is fixed.
+
 ## Known limitations, stated in advance
 
 - The band edges are implied from SAFEX's own history. Early in the sample, the import edge has not
