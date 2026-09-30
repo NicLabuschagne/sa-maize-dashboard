@@ -307,3 +307,17 @@ def test_season_rule_publishes_nothing_from_a_partial_harvest_window() -> None:
     exporting = pd.concat([_weekly_rows("exports", weeks, [50_000.0] * len(weeks)),
                            _weekly_rows("imports", weeks, [1_000.0] * len(weeks))])
     assert revealed.season_rule_floor_basis(frame, exporting, "yellow", 0.10).isna().all()
+
+
+def test_border_baseline_uses_first_published_months_only() -> None:
+    months = pd.date_range("2019-01-01", periods=12, freq="MS")
+    rows = [{"period_type": "latest_month", "is_final": False, "attribute": "exports_whole_border",
+             "grain_class": "yellow", "latest_month": m, "vintage_date": m + pd.Timedelta(days=55),
+             "value_t": 52_180.0} for m in months]
+    # a later release revises March 2019 upward; the baseline must keep the first-published value
+    rows.append({**rows[2], "vintage_date": months[-1] + pd.Timedelta(days=60), "value_t": 999_999.0})
+    balance_sheet = pd.DataFrame(rows)
+    dates = pd.Series(pd.to_datetime(["2019-06-01", "2020-03-01"]))
+    baseline = revealed.border_baseline(balance_sheet, "yellow", dates)
+    assert np.isnan(baseline.iloc[0])                     # fewer than 9 months published by then
+    assert baseline.iloc[1] == pytest.approx(12.0)        # 12 x 52 180 t / 52.18 weeks = 12 kt/week

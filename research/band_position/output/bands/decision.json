@@ -3,6 +3,11 @@
     "b0"
   ],
   "chosen": "b0",
+  "eligible_v2": [
+    "b0"
+  ],
+  "chosen_v2": "b0",
   "truncation_passed": true,
-  "runs_logged": 2
+  "runs_logged": 3,
+  "note": "computed from saved tables after the addendum-3 run crashed on the variants-log append"
 }

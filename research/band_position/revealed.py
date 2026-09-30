@@ -163,6 +163,39 @@ def kalman_floor(frame: pd.DataFrame, export_pace: pd.Series, params: KalmanSett
     return out
 
 
+# ----------------------------------------------------------------------------- B2s: deep-sea pace
+WEEKS_PER_YEAR = 52.18
+
+
+def border_baseline(balance_sheet: pd.DataFrame, grain_class: str, dates: pd.Series) -> pd.Series:
+    """Normal cross-border exports per week, as known on each date (Addendum 3).
+
+    Each month's cross-border exports are taken as first published. At every monthly release, the
+    baseline is the sum over the latest 12 reported months ÷ 52.18 (at least 9 months, scaled to 12),
+    and it holds until the next release.
+    """
+    rows = balance_sheet[(balance_sheet.period_type == "latest_month") & (~balance_sheet.is_final)
+                         & (balance_sheet.attribute == "exports_whole_border")
+                         & (balance_sheet.grain_class == grain_class)]
+    rows = rows.sort_values(["vintage_date", "latest_month"])
+    first_published: dict[pd.Timestamp, float] = {}
+    events = []
+    for vintage, group in rows.groupby("vintage_date", sort=True):
+        for row in group.itertuples():
+            first_published.setdefault(row.latest_month, row.value_t)
+        months = sorted(first_published)[-12:]
+        if len(months) >= 9:
+            total = sum(first_published[m] for m in months) * 12 / len(months)
+            events.append({"date": vintage, "baseline": total / WEEKS_PER_YEAR / 1e3})
+    left = pd.DataFrame({"date": pd.to_datetime(dates).astype("datetime64[ns]")})
+    if not events:
+        return pd.Series(np.nan, index=dates.index)
+    table = pd.DataFrame(events)
+    table["date"] = table["date"].astype("datetime64[ns]")
+    joined = pd.merge_asof(left, table, on="date", direction="backward")
+    return pd.Series(joined["baseline"].to_numpy(), index=dates.index, name="border_baseline")
+
+
 # ----------------------------------------------------------------------------- all candidates
 def build_candidates(inputs: Inputs, grain_class: str, settings: dict,
                      kalman: KalmanSettings | None = None) -> pd.DataFrame:
@@ -175,7 +208,11 @@ def build_candidates(inputs: Inputs, grain_class: str, settings: dict,
     frame["floor_b1"] = frame["world"] * np.exp(frame["floor_basis_b1"])
     filtered = kalman_floor(frame, frame["export_pace"], kalman)
     frame["state_b2"], frame["state_sd_b2"], frame["floor_b2"] = filtered["state"], filtered["state_sd"], filtered["floor"]
-    for name in ("b0", "b1", "b2"):
+    frame["border_baseline"] = border_baseline(inputs.balance_sheet, grain_class, frame["date"])
+    frame["sea_export_pace"] = (frame["export_pace"] - frame["border_baseline"]).clip(lower=0)
+    filtered = kalman_floor(frame, frame["sea_export_pace"], kalman)
+    frame["state_b2s"], frame["state_sd_b2s"], frame["floor_b2s"] = filtered["state"], filtered["state_sd"], filtered["floor"]
+    for name in ("b0", "b1", "b2", "b2s"):
         frame[f"ceiling_{name}"] = frame[f"floor_{name}"] + frame["cost_width"]
         frame[f"position_{name}"] = band.band_position(frame["safex"], frame[f"floor_{name}"], frame[f"ceiling_{name}"])
     return frame
@@ -192,8 +229,8 @@ def strong_export_weeks(weekly: pd.DataFrame, grain_class: str, min_kt: float) -
 def fixed_world_floor(frame: pd.DataFrame, name: str, anchor: pd.Series) -> pd.Series:
     """The candidate's floor re-priced at one day's world price and costs (`anchor`), so changes over
     time reflect only what the method has learnt, not CBOT or ZAR moves."""
-    if name == "b2":
-        return anchor["world"] * np.exp(frame["state_b2"]) - anchor["export_deductions"]
+    if name in ("b2", "b2s"):
+        return anchor["world"] * np.exp(frame[f"state_{name}"]) - anchor["export_deductions"]
     basis = np.log(frame[f"floor_{name}"] / frame["world"])
     return anchor["world"] * np.exp(basis)
 
@@ -230,3 +267,60 @@ def band_criteria(frame: pd.DataFrame, weekly: pd.DataFrame, grain_class: str, n
             "median_distance_usd": float(distance_usd[strong].median()) if strong.any() else np.nan,
             "export_seasons_scored": len(settle_weeks),
             "median_weeks_to_settle": float(np.median(settle_weeks)) if settle_weeks else np.nan}
+
+
+# ----------------------------------------------------------------------------- Addendum 3 criteria
+def monthly_flows(balance_sheet: pd.DataFrame, grain_class: str) -> pd.DataFrame:
+    """Imports, exports and harbour exports per month, latest published values (evaluation only)."""
+    rows = balance_sheet[(balance_sheet.period_type == "latest_month") & (~balance_sheet.is_final)
+                         & (balance_sheet.grain_class == grain_class)
+                         & balance_sheet.attribute.isin(["imports", "exports", "exports_whole_harbour"])]
+    rows = rows.sort_values("vintage_date").drop_duplicates(["latest_month", "attribute"], keep="last")
+    table = rows.pivot_table(index="latest_month", columns="attribute", values="value_t")
+    return table.reindex(columns=["imports", "exports", "exports_whole_harbour"]).fillna(0.0)
+
+
+def band_criteria_v2(frame: pd.DataFrame, balance_sheet: pd.DataFrame, grain_class: str, name: str,
+                     start: str, end: str, trigger_usd: float = 10.0, strong_harbour_kt: float = 100.0,
+                     export_season_kt: float = 500.0) -> dict:
+    """C1' breaches beyond the trigger, C5 import-season discrimination, C2' accuracy in strong
+    sea-export months, C3' weeks to first come within the trigger in a strong sea-export month."""
+    window = frame[(frame["date"] >= start) & (frame["date"] <= end)].dropna(subset=[f"floor_{name}"]).copy()
+    window["distance_usd"] = (window["safex"] - window[f"floor_{name}"]) / window["usdzar"]
+    window["month"] = window["date"].dt.to_period("M").dt.to_timestamp()
+    flows = monthly_flows(balance_sheet, grain_class)
+    deficit_months = flows.index[flows["imports"] > flows["exports"]]
+    strong_months = flows.index[flows["exports_whole_harbour"] >= strong_harbour_kt * 1e3]
+
+    breach = window["distance_usd"] < -trigger_usd
+    run, longest = 0, 0
+    for flag in breach.to_numpy():
+        run = run + 1 if flag else 0
+        longest = max(longest, run)
+
+    deficit = window[window["month"].isin(deficit_months)]
+    deficit_gap = float((deficit["safex"] - deficit[f"floor_{name}"]).median()) if len(deficit) else np.nan
+    half_width = float(0.5 * deficit["cost_width"].median()) if len(deficit) else np.nan
+
+    strong = window[window["month"].isin(strong_months)]
+    window["marketing_year"] = marketing_year(window["date"])
+    harbour_by_year = flows["exports_whole_harbour"].groupby(marketing_year(pd.Series(flows.index)).to_numpy()).sum()
+    speed = []
+    for year, total in harbour_by_year.items():
+        if total < export_season_kt * 1e3 or year not in set(window["marketing_year"]):
+            continue
+        season = window[(window["marketing_year"] == year) & window["month"].isin(strong_months)]
+        hits = season[season["distance_usd"].abs() <= trigger_usd]
+        first = hits["date"].min() if len(hits) else None
+        speed.append((first - pd.Timestamp(f"{year}-05-01")).days / 7 if first is not None else 52.0)
+
+    return {"band": name, "grain_class": grain_class, "days": int(len(window)),
+            "share_breach_beyond_trigger": float(breach.mean()), "longest_breach_days": int(longest),
+            "deficit_days": int(len(deficit)), "deficit_median_gap_rand": deficit_gap,
+            "half_cost_width_rand": half_width,
+            "passes_import_season_test": bool(deficit_gap >= half_width) if len(deficit) else False,
+            "strong_sea_export_days": int(len(strong)),
+            "median_abs_distance_usd": float(strong["distance_usd"].abs().median()) if len(strong) else np.nan,
+            "median_distance_usd": float(strong["distance_usd"].median()) if len(strong) else np.nan,
+            "export_seasons_scored": len(speed),
+            "median_weeks_to_first_touch": float(np.median(speed)) if speed else np.nan}

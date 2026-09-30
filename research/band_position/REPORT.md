@@ -1,5 +1,56 @@
 # Band position vs the balance sheet
 
+## Status: parked (30 Sep 2026)
+
+**Where it stands**
+- The fair-position model describes where yellow sits in the band (OOS R² ≈ 0.2, including
+  2023–26). Its gap does not predict 5–40-day moves (round 2).
+- A market-revealed export floor was tried twice (Addenda 2 and 3). Both pre-registered rules
+  select B0, which is loose, not accurate (below). No floor has passed every economic test. The edge
+  trading test (export side, yellow, arb return) has **not** been run, and no forward return has been
+  computed for any band.
+
+**Next steps when resumed**
+1. B2s leaks upward in deficit seasons through many small updates. Candidate fix: allow upward
+   updates only while the published sea-export pace stays above the threshold for several weeks,
+   or only in a confirmed export season. That needs a new addendum.
+2. CEC crop estimates for the harvest window, where stocks don't explain position.
+3. Then the edge trading test, pre-registered as in the Addendum 2/3 discussion: yellow, export zone
+   within $10 of the floor, 20-day arb return, three gap signals, the desk rule as benchmark.
+
+## Band choice, second attempt (Addendum 3)
+
+Run: `python -m research.band_position.run_bands` (3 runs logged in `output/bands/variants_log.csv`:
+2 for Addendum 2, 1 for Addendum 3). The Addendum 3 run crashed after writing every table and plot,
+on appending a new column to the variants log. The log was repaired and the append fixed.
+`decision.json` was produced by the runner's own rule functions from the saved tables.
+Truncation test 100/100 exact for all four candidates, B2s included.
+
+| Yellow | B0 expanding | B1 season rule | B2 Kalman | B2s Kalman, sea exports |
+|---|---|---|---|---|
+| C1′ days > $10 below floor (≤ 10%) | 1.7% ✓ | 10.4% ✗ | 5.8% ✓ | 3.8% ✓ |
+| C1′ longest breach (days) | 24 | 135 | 23 | 15 |
+| C5 deficit-month gap vs ½ width (R735) | R1 233 ✓ | R799 ✓ | R241 ✗ | R542 ✗ |
+| C2′ median \|distance\|, strong sea-export months | $33.1 | $22.8 | $6.3 | $6.4 |
+| C2′ median signed distance | +$33.1 | +$17.0 | +$5.2 | +$5.3 |
+| C3′ weeks to first come within $10 (median, 7 seasons) | 52 (never) | 5.0 | 0.4 | 0.4 |
+
+**The pre-registered rule selects B0 again** (the only candidate passing C1′ and C5). That is the
+result on record. What it means in practice:
+- **B0 is safe but not a floor.** It is never breached and far below price in deficit seasons. But
+  in strong sea-export months, yellow sits a median $33/t above it, and in no export season does it
+  come within $10 of price. On the desk's $5–10 trigger it would never signal a trade.
+- **B2s is accurate when exports flow.** In strong sea-export months, SAFEX sits a median $5/t
+  above it, inside the desk trigger. It first comes within $10 of price a median 0.4 weeks after
+  1 May. Part of that speed is B2s partly following price, the same weakness C5 catches. Using sea exports fixed 2015/16. It still fails the import-season test because of
+  2024/25: deep-sea exports were near zero, but small positive readings (weekly total minus border
+  baseline) added up over many days and let the floor rise with price.
+- **B1 misses C1′ by 0.4 points**, all from the 2021 lag (a 135-day breach).
+- **White:** only 84 strong sea-export days, from one export season. A deep-sea floor for white
+  can't be evaluated, which is consistent with white trading cross-border.
+
+No candidate has passed every economic property. The study is parked here, before any trading test.
+
 ## Band choice (Addendum 2): pre-registered result and why it should not be adopted
 
 Run: `python -m research.band_position.run_bands` (2 runs logged: the second after fixing a
