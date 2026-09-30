@@ -215,3 +215,95 @@ def test_daily_fair_position_uses_only_earlier_weeks() -> None:
     assert np.allclose(base.loc[upto, "fair_position"], after.loc[upto, "fair_position"], equal_nan=True)
     # the first out-of-sample week can start a few days before `first`; nothing earlier is predicted
     assert base.loc[base["date"] < first - pd.Timedelta(days=7), "fair_position"].isna().all()
+
+
+# ----------------------------------------------------------------------------- addendum 2: revealed floors
+from research.band_position import revealed  # noqa: E402
+
+
+def _weekly_rows(flow: str, week_ends: list[str], tons: list[float], lag_days: int = 12) -> pd.DataFrame:
+    week_end = pd.to_datetime(week_ends)
+    return pd.DataFrame({"grain_class": "yellow", "flow": flow, "week_end": week_end, "tons_week": tons,
+                         "available_date": week_end + pd.Timedelta(days=lag_days),
+                         "season": "2020/21"})
+
+
+def test_published_pace_only_uses_published_weeks() -> None:
+    weekly = _weekly_rows("exports", ["2020-06-05", "2020-06-12"], [40_000.0, 20_000.0])
+    dates = pd.Series(pd.to_datetime(["2020-06-16", "2020-06-17", "2020-06-24"]))
+    pace = revealed.published_pace(weekly, "yellow", "exports", dates, n_weeks=4)
+    assert np.isnan(pace.iloc[0])                  # first week published on 17 June
+    assert pace.iloc[1] == pytest.approx(40.0)
+    assert pace.iloc[2] == pytest.approx(30.0)
+
+
+def _harvest_frame() -> pd.DataFrame:
+    dates = pd.bdate_range("2020-05-01", "2020-09-30")
+    basis = np.where(dates.month <= 7, 0.05, 0.30)
+    return pd.DataFrame({"date": dates, "basis": basis})
+
+
+def test_season_rule_needs_export_season_and_waits_for_publication() -> None:
+    frame = _harvest_frame()
+    weeks = [str(d.date()) for d in pd.date_range("2020-05-01", "2020-07-31", freq="W-FRI")]
+    exporting = pd.concat([_weekly_rows("exports", weeks, [50_000.0] * len(weeks)),
+                           _weekly_rows("imports", weeks, [1_000.0] * len(weeks))])
+    floor = revealed.season_rule_floor_basis(frame, exporting, "yellow", 0.10)
+    usable_from = pd.Timestamp(weeks[-1]) + pd.Timedelta(days=12)
+    assert floor[frame["date"] < usable_from].isna().all()
+    assert np.allclose(floor[frame["date"] >= usable_from], 0.05)
+    importing = pd.concat([_weekly_rows("exports", weeks, [1_000.0] * len(weeks)),
+                           _weekly_rows("imports", weeks, [50_000.0] * len(weeks))])
+    assert revealed.season_rule_floor_basis(frame, importing, "yellow", 0.10).isna().all()
+
+
+def _kalman_frame(z: np.ndarray, start: str = "2020-08-03") -> pd.DataFrame:
+    dates = pd.bdate_range(start, periods=len(z))
+    world = np.full(len(z), 3000.0)
+    costs = np.full(len(z), 500.0)
+    return pd.DataFrame({"date": dates, "world": world, "export_deductions": costs,
+                         "safex": world * np.exp(z) - costs})
+
+
+def test_kalman_ignores_high_prices_without_exports_but_follows_prices_below() -> None:
+    params = revealed.KalmanSettings()
+    z = np.r_[np.full(50, 0.20), np.full(50, 0.40)]          # price rises, no exports
+    out = revealed.kalman_floor(_kalman_frame(z), pd.Series(np.zeros(100)), params)
+    assert out["state"].iloc[-1] == pytest.approx(0.20, abs=1e-9)
+    z = np.r_[np.full(50, 0.20), np.full(50, 0.05)]          # price falls below the floor
+    out = revealed.kalman_floor(_kalman_frame(z), pd.Series(np.zeros(100)), params)
+    assert out["state"].iloc[-1] < 0.08
+
+
+def test_kalman_follows_high_prices_when_exports_flow() -> None:
+    z = np.r_[np.full(50, 0.20), np.full(150, 0.30)]
+    out = revealed.kalman_floor(_kalman_frame(z), pd.Series(np.full(200, 40.0)), revealed.KalmanSettings())
+    assert out["state"].iloc[-1] > 0.28
+
+
+def test_kalman_floor_on_day_t_ignores_day_t_price() -> None:
+    z = np.full(80, 0.20)
+    base = revealed.kalman_floor(_kalman_frame(z), pd.Series(np.full(80, 40.0)), revealed.KalmanSettings())
+    z_shocked = z.copy()
+    z_shocked[60] = -0.5
+    shocked = revealed.kalman_floor(_kalman_frame(z_shocked), pd.Series(np.full(80, 40.0)), revealed.KalmanSettings())
+    assert base["floor"].iloc[60] == pytest.approx(shocked["floor"].iloc[60])
+    assert shocked["floor"].iloc[61] < base["floor"].iloc[61]
+
+
+def test_kalman_uncertainty_jumps_at_new_marketing_year() -> None:
+    z = np.full(60, 0.20)
+    out = revealed.kalman_floor(_kalman_frame(z, start="2021-03-01"), pd.Series(np.full(60, 40.0)),
+                                revealed.KalmanSettings())
+    dates = pd.bdate_range("2021-03-01", periods=60)
+    first_may = np.flatnonzero(dates >= "2021-05-01")[0]
+    assert out["state_sd"].iloc[first_may] > 5 * out["state_sd"].iloc[first_may - 1]
+
+
+def test_season_rule_publishes_nothing_from_a_partial_harvest_window() -> None:
+    frame = _harvest_frame()
+    frame = frame[frame["date"] <= "2020-06-30"]                  # data cut mid-harvest
+    weeks = [str(d.date()) for d in pd.date_range("2020-05-01", "2020-06-19", freq="W-FRI")]
+    exporting = pd.concat([_weekly_rows("exports", weeks, [50_000.0] * len(weeks)),
+                           _weekly_rows("imports", weeks, [1_000.0] * len(weeks))])
+    assert revealed.season_rule_floor_basis(frame, exporting, "yellow", 0.10).isna().all()

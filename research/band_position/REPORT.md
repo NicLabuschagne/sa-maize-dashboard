@@ -1,5 +1,42 @@
 # Band position vs the balance sheet
 
+## Band choice (Addendum 2): pre-registered result and why it should not be adopted
+
+Run: `python -m research.band_position.run_bands` (2 runs logged: the second after fixing a
+truncation-rebuild bug in B1, described below; criteria values identical in both). Evaluation
+window May 2015 – Sep 2026. Outputs in `output/bands/`.
+
+| Yellow | B0 expanding | B1 season rule | B2 Kalman |
+|---|---|---|---|
+| C1 days below floor | 2.4% | 20.0% | 27.6% |
+| C1 longest spell below (days) | 67 | 144 | 55 |
+| C2 median distance above floor, strong export weeks (USD/t) | 33.7 | 16.9 | 5.7 |
+| C3 median weeks to settle | 0.1 | 0.4 | 18.0 |
+| C4 truncation (50 dates × 2 classes) | exact | exact (after fix) | exact |
+
+White: B0 58.5, B1 21.0, B2 3.3 USD/t on C2; C1 2.9%, 27.3%, 27.8%. The B2 season-jump sensitivity
+(0.075, 0.30) barely changes anything.
+
+**The pre-registered rule selects B0** (the only candidate with C1 ≤ 10%). **It should not be
+adopted.** The criteria were badly designed, and each can be gamed by a floor that is not a floor:
+- **B0 passes C1 by being too low.** In weeks when SA exported ≥ 30 kt, yellow sat $34/t above it,
+  and from 2024 it runs R500–1 000/t under price. It isn't export parity.
+- **B2 wins C2 mostly by following price.** It climbs with SAFEX in the deficit seasons 2015/16 and
+  2024/25, when export parity isn't binding. The cause is that SAGIS weekly exports include
+  cross-border trade. Yellow 2024/25: harbour exports 4 kt for the season, cross-border 15 kt/week.
+  The filter read that as exports flowing.
+- **C3 rewards inertia.** B0 "settles" immediately because it barely learns.
+- **B1 behaves most like the economics** (near price in export years, far below in import years) but
+  lags. In May 2021 it carried the 2020/21 floor into a CBOT rally and sat about R1 000/t above
+  SAFEX for months.
+
+**Truncation bug (fixed).** In a rebuild cut mid-harvest, B1 treated the partial May–July window as
+a finished season and published a floor early. The full build was already correct, so every result
+number is unchanged. A regression test now covers it.
+
+White harbour exports are small except in 2017 and 2022; white trades cross-border. A deep-sea
+export floor for white barely exists, so the edge work stays on yellow.
+
 ## Round 2 (Addendum 1): constant-maturity price, linear primary, recent periods, IC
 
 Run: config hash `c320056ceae8`; **2 configurations run in total** (`output/variants_log.csv`).
