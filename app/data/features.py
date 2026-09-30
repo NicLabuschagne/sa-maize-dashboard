@@ -10,6 +10,7 @@ import pandas as pd
 
 MAIN_MONTHS = (3, 5, 7, 9, 12)  # liquid SAFEX maize delivery months
 ROLL_DAYS = 7                   # roll to next contract this many days before expiry
+CM_TENOR_DAYS = 90              # constant-maturity tenor: the longest gap between main months
 STATE_ATTRS = ("opening_stock", "deliveries", "imports", "utilisation", "exports",
                "closing_stock", "human_consumption", "animal_feed")
 
@@ -66,6 +67,34 @@ def _contract_rank(p: pd.DataFrame) -> pd.DataFrame:
     return live
 
 
+def constant_maturity(p: pd.DataFrame, tenor_days: int = CM_TENOR_DAYS) -> pd.DataFrame:
+    """Price at a fixed `tenor_days` to expiry, per symbol and trade date, with no jump at rolls.
+
+    The front month switches from the old-crop March contract to new-crop May in one day, and the
+    front close can move 30-40% on that day with no trade taking place. Interpolating log price
+    linearly in days to expiry between the main-month contracts either side of the tenor turns the
+    switch into a gradual blend. Used for price *levels* in the fair-value models; tradeable returns
+    stay on the roll-adjusted front month. If every live contract is beyond the tenor the nearest is
+    used; if none reaches it the day has no value.
+    """
+    live = p[(p.expiry_date.dt.month.isin(MAIN_MONTHS)) & (p.days_to_expiry >= ROLL_DAYS) & (p.close > 0)]
+    live = live[["symbol", "trade_date", "days_to_expiry", "close"]].sort_values(["symbol", "trade_date", "days_to_expiry"])
+    rows = []
+    for (symbol, date), g in live.groupby(["symbol", "trade_date"], sort=True):
+        days, close = g["days_to_expiry"].to_numpy(dtype=float), g["close"].to_numpy(dtype=float)
+        above = np.flatnonzero(days >= tenor_days)
+        if len(above) == 0:
+            continue
+        upper = above[0]
+        if upper == 0:
+            price = close[0]
+        else:
+            w = (tenor_days - days[upper - 1]) / (days[upper] - days[upper - 1])
+            price = float(np.exp((1 - w) * np.log(close[upper - 1]) + w * np.log(close[upper])))
+        rows.append((symbol, date, price))
+    return pd.DataFrame(rows, columns=["symbol", "trade_date", "close_cm"])
+
+
 def continuous(p: pd.DataFrame) -> pd.DataFrame:
     """Front (rank 1) and second (rank 2) main-month contracts per symbol/date, plus the calendar spread."""
     live = _contract_rank(p)
@@ -79,16 +108,18 @@ def continuous(p: pd.DataFrame) -> pd.DataFrame:
     c = c.sort_values(["symbol", "trade_date"])
     same = c.groupby("symbol")["expiry_1"].shift() == c["expiry_1"]
     c["log_ret_1"] = np.where(same, np.log(c["close_1"] / c.groupby("symbol")["close_1"].shift()), np.nan)
+    c = c.merge(constant_maturity(p), on=["symbol", "trade_date"], how="left")
     return c.reset_index(drop=True)
 
 
 def white_yellow_spread(cont: pd.DataFrame) -> pd.DataFrame:
-    """WMAZ - YMAZ front-month spread on matching trade dates and expiries."""
-    w = cont[cont.symbol == "WMAZ"][["trade_date", "expiry_1", "close_1"]]
-    y = cont[cont.symbol == "YMAZ"][["trade_date", "expiry_1", "close_1"]]
+    """White minus yellow: front-month spread on matching expiries, and the premium on the 90-day
+    constant-maturity prices (`wy_spread_pct`), which does not jump when both legs roll to new crop."""
+    w = cont[cont.symbol == "WMAZ"][["trade_date", "expiry_1", "close_1", "close_cm"]]
+    y = cont[cont.symbol == "YMAZ"][["trade_date", "expiry_1", "close_1", "close_cm"]]
     m = w.merge(y, on=["trade_date", "expiry_1"], suffixes=("_w", "_y"))
     m["wy_spread"] = m["close_1_w"] - m["close_1_y"]
-    m["wy_spread_pct"] = m["wy_spread"] / m["close_1_y"] * 100
+    m["wy_spread_pct"] = (m["close_cm_w"] / m["close_cm_y"] - 1) * 100
     return m
 
 

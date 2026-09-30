@@ -66,4 +66,4 @@ def test_parity_panel_relative_forward_is_local_minus_world() -> None:
     assert len(p) > 100
     d = p.dropna(subset=["fwd_10d", "fwd_outright_10d", "fwd_world_10d"])
     assert np.allclose(d.fwd_10d, d.fwd_outright_10d - d.fwd_world_10d)
-    assert np.allclose(np.exp(d.basis), d.close_1 / d.world_rand)
+    assert np.allclose(np.exp(d.basis), d.close_cm / d.world_rand)   # level on the 90-day constant maturity

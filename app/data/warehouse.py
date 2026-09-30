@@ -49,3 +49,12 @@ def load_macro_snap() -> pd.DataFrame:
 @st.cache_data
 def load_signals() -> pd.DataFrame:
     return _query("SELECT * FROM signals ORDER BY model, grain_class, vintage_date")
+
+
+@st.cache_data
+def load_sagis_parity() -> pd.DataFrame:
+    """SAGIS weekly import/export parity with `available_date`. Empty frame if not built."""
+    try:
+        return _query("SELECT * FROM sagis_parity ORDER BY date")
+    except Exception:  # noqa: BLE001 - table not built yet
+        return pd.DataFrame(columns=["date", "export_randfontein", "import_randfontein", "available_date"])

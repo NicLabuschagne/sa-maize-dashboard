@@ -2,6 +2,12 @@
 
 ## Status: parked (30 Sep 2026)
 
+**In the app.** The round-2 model (hybrid band, 90-day price, linear on the weekly-nowcast domestic
+stocks-to-use) is the dashboard's *Band Fair Value* page (`app/data/band_fairvalue.py`), and it reproduces
+this study's out-of-sample R² exactly. The app's Models A, C and D now use the 90-day price for levels.
+That moved the Release Fade default portfolio from Sharpe 1.05 / max DD −7.64% / 49 trades to
+0.77 / −9.02% / 47: part of the original edge was the roll artefact.
+
 **Where it stands**
 - The fair-position model describes where yellow sits in the band (OOS R² ≈ 0.2, including
   2023–26). Its gap does not predict 5–40-day moves (round 2).
@@ -58,8 +64,11 @@ Holdout (2023–26) Sharpe: T0 −0.46, T1 −0.43, T2 −0.36, T3 −0.48. Defl
   in the zone is −0.18 (t −2.7), i.e. momentum, not reversion.
 - **About half the loss is one episode.** Early 2017, the post-drought record crop collapsed the
   basis from about +0.5 to +0.1.
-- **The CBOT continuation has roll gaps.** 22 of 72 daily moves above 5% are in July. Zeroing those
-  days barely changes yellow T0 (−10.2% → −9.8%/yr), so they are not the cause.
+- **Large CBOT moves are real, not roll gaps.** 22 of 72 daily moves above 5% are in July. They were
+  first suspected to be contract-roll gaps, but checking the series showed no roll step (in 2021, July
+  traded about 20% over December and the continuation shows no such drop). The largest moves are USDA
+  report days, e.g. 30 June acreage (2011, 2021), Oct 2010 and Jan 2010 crop reports, and Mar 2013
+  stocks. Zeroing them barely changes yellow T0 (−10.2% → −9.8%/yr).
 
 **Reading.** This does not show that the desk's export-parity arb fails. It shows that a floor
 learnt from price (B2) can't stand in for a paper calculation: it moves with price and removes the

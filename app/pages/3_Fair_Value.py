@@ -132,7 +132,7 @@ def parity_block() -> None:
     k1, k2, k3, k4, k5, k6 = st.columns(6)
     k1.metric("Basis z", f"{last.z:+.2f}")
     k2.metric("SAFEX vs parity", f"{np.exp(last.basis) - 1:+.1%}",
-              f"R{last.close_1:,.0f} vs R{last.world_rand:,.0f}")
+              f"R{last.close_cm:,.0f} vs R{last.world_rand:,.0f}")
     k3.metric("Slope on log cover", f"{fit.coef_full['x']:+.3f}", f"t = {fit.tstat_full['x']:.1f}")
     k4.metric("R² (full sample)", f"{fit.r2_full:.2f}")
     k5.metric("Basis half-life", f"{fit.half_life_months:.1f} mo")
@@ -141,7 +141,8 @@ def parity_block() -> None:
     c1, c2 = st.columns(2)
     with c1:
         fig = go.Figure()
-        P.line(fig, q.vintage_date, q.close_1, f"SAFEX {sym} front", entity=cls, hover="R%{y:,.0f}<extra>SAFEX</extra>")
+        P.line(fig, q.vintage_date, q.close_cm, f"SAFEX {sym} (90-day constant maturity)", entity=cls,
+               hover="R%{y:,.0f}<extra>SAFEX</extra>")
         P.line(fig, q.vintage_date, q.world_rand, "CBOT corn × USD/ZAR at the SAFEX mark", entity="aux2",
                hover="R%{y:,.0f}<extra>parity</extra>")
         P.layout(fig, "SAFEX against world parity, both in R/t", ytitle="R/t", height=360)

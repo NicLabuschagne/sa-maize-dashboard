@@ -21,6 +21,7 @@ def _sd(dates: list[str], cover: list[float]) -> pd.DataFrame:
 def _cont(start: str, n: int) -> pd.DataFrame:
     td = pd.bdate_range(start, periods=n)
     return pd.DataFrame({"symbol": "WMAZ", "trade_date": td, "close_1": np.linspace(2000, 3000, n),
+                         "close_cm": np.linspace(2000, 3000, n),
                          "spread_2_1_pct_ann": 5.0, "log_ret_1": 0.0, "expiry_1": "2020-03"})
 
 

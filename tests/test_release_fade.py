@@ -63,7 +63,13 @@ def test_metrics_definitions() -> None:
 
 
 def test_reproduces_research_portfolio() -> None:
-    """Default page configuration must match research/portfolio_5y.py (Sharpe 1.05, max DD -7.64%)."""
+    """Default page configuration on the current signals.
+
+    research/portfolio_5y.py reported Sharpe 1.05, max DD -7.64%, 49 trades on front-month price levels.
+    Since the fair-value models moved to the 90-day constant-maturity price (no jump at the old/new-crop
+    roll), the same configuration gives Sharpe 0.77, max DD -9.02%, 47 trades: part of the original edge
+    was the roll artefact in Model A/D z-scores.
+    """
     if not DB_PATH.exists():
         pytest.skip("warehouse not built")
     from app.data import features as F
@@ -76,6 +82,6 @@ def test_reproduces_research_portfolio() -> None:
     res = RF.run_portfolio(sig, RF.instruments(cont, px, snap), {k: 0.5 for k in RF.DEFAULT_LEGS},
                            "2021-09-01", "2026-12-31")
     m = RF.metrics(res["portfolio"], res["trades"])
-    assert m["Trades"] == 49
-    assert m["Sharpe"] == pytest.approx(1.05, abs=0.01)
-    assert m["Max DD %"] == pytest.approx(-7.64, abs=0.05)
+    assert m["Trades"] == 47
+    assert m["Sharpe"] == pytest.approx(0.77, abs=0.01)
+    assert m["Max DD %"] == pytest.approx(-9.02, abs=0.05)

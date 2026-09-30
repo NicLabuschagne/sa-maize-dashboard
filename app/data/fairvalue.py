@@ -8,7 +8,8 @@ Model C  white premium (% of yellow)= a + b·(log white cover − log yellow cov
 with ~200 monthly observations that is the difference between a fit and an overfit.
 
 Every fitted value is produced on an expanding window that ends the month before, so the residual
-at t is out-of-sample.  Forward returns are roll-adjusted log returns of the front month.
+at t is out-of-sample.  Price *levels* use the 90-day constant-maturity price (`close_cm`), which does
+not jump at the old-/new-crop roll; forward returns are roll-adjusted log returns of the front month.
 """
 from __future__ import annotations
 
@@ -70,16 +71,16 @@ def real_price(px: pd.Series, dates: pd.Series, cpi: pd.DataFrame) -> pd.Series:
 
 # ----------------------------------------------------------------------------- panels
 def panel_price(sd: pd.DataFrame, cont: pd.DataFrame, cpi: pd.DataFrame, grain_class: str, symbol: str) -> pd.DataFrame:
-    """One row per vintage: cover, real front price, season, forward returns. Model A input."""
+    """One row per vintage: cover, real price (90-day constant maturity), season, forward returns. Model A input."""
     s = sd[sd.grain_class == grain_class].dropna(subset=["months_cover"]).copy()
     s = s[s.months_cover > 0]
     s["vintage_date"] = s["vintage_date"].astype("datetime64[ns]")
-    c = cont[cont.symbol == symbol][["trade_date", "close_1", "spread_2_1_pct_ann"]].copy()
+    c = cont[cont.symbol == symbol][["trade_date", "close_1", "close_cm", "spread_2_1_pct_ann"]].copy()
     c["trade_date"] = c["trade_date"].astype("datetime64[ns]")
     p = pd.merge_asof(s.sort_values("vintage_date"), c.sort_values("trade_date"),
                       left_on="vintage_date", right_on="trade_date", direction="forward", tolerance=PRICE_TOL)
-    p = p.dropna(subset=["close_1"]).reset_index(drop=True)
-    p["real_px"] = real_price(p["close_1"], p["vintage_date"], cpi)
+    p = p.dropna(subset=["close_cm"]).reset_index(drop=True)
+    p["real_px"] = real_price(p["close_cm"], p["vintage_date"], cpi)
     p["y"] = np.log(p["real_px"])
     p["x"] = np.log(p["months_cover"])
     idx = roll_adjusted_index(cont, symbol)
@@ -287,8 +288,8 @@ def panel_parity(sd: pd.DataFrame, cont: pd.DataFrame, snap: pd.DataFrame, cpi: 
     wd.columns = ["date", "world_rand"]
     p = pd.merge_asof(p.sort_values("trade_date"), wd, left_on="trade_date", right_on="date",
                       direction="backward", tolerance=pd.Timedelta("5D"))
-    p = p.dropna(subset=["world_rand", "close_1"]).reset_index(drop=True)
-    p["basis"] = np.log(p["close_1"] / p["world_rand"])
+    p = p.dropna(subset=["world_rand", "close_cm"]).reset_index(drop=True)
+    p["basis"] = np.log(p["close_cm"] / p["world_rand"])
     p["y"] = p["basis"]
     p["x"] = np.log(p["months_cover"])
     fw = forward_returns(world, p["vintage_date"])
@@ -314,7 +315,7 @@ def panel_price_with_world(sd: pd.DataFrame, cont: pd.DataFrame, snap: pd.DataFr
     p = pd.merge_asof(p.sort_values("trade_date"), wd, left_on="trade_date", right_on="date",
                       direction="backward", tolerance=pd.Timedelta("5D"))
     p = p.dropna(subset=["world_rand", "y"]).reset_index(drop=True)
-    p["lw"] = np.log(p["world_rand"] * (p["real_px"] / p["close_1"]))   # same CPI deflator as y
+    p["lw"] = np.log(p["world_rand"] * (p["real_px"] / p["close_cm"]))   # same CPI deflator as y
     return p
 
 
@@ -340,7 +341,7 @@ def decompose_world_r2(paw: pd.DataFrame, snap: pd.DataFrame) -> dict:
         return float(1 - (r @ r) / ((target - target.mean()) ** 2).sum())
 
     y_real = p["y"].to_numpy()
-    y_nom = np.log(p["close_1"].to_numpy())
+    y_nom = np.log(p["close_cm"].to_numpy())
     lw_nom = np.log(p["world_rand"].to_numpy())
     lc, lf = np.log(p["cbot_corn_safexclose"].to_numpy()), np.log(p["usdzar_safexclose"].to_numpy())
     S, one = fourier(p["my_month"]), np.ones((len(p), 1))

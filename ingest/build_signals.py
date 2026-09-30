@@ -5,7 +5,7 @@ questions about fair value, residuals and z-scores with plain SQL.
 
 One row per (model, grain_class, vintage_date). `actual` and `fair_value` are in the
 units of that model's left-hand side:
-    A  log(real front price)
+    A  log(real price, 90-day constant maturity)
     B  calendar spread, % annualised
     C  white premium, % of yellow
     D  log(SAFEX / world parity)   -- the basis
@@ -26,7 +26,7 @@ from app.data import features as F  # noqa: E402
 from config import DB_PATH  # noqa: E402
 
 KEEP = ["vintage_date", "latest_month", "marketing_year", "my_month", "months_cover",
-        "y", "fv", "resid", "z", "close_1", "world_rand", "basis"]
+        "y", "fv", "resid", "z", "close_1", "close_cm", "world_rand", "basis"]
 
 
 def _tidy(panel: pd.DataFrame, model: str, grain_class: str) -> pd.DataFrame:
@@ -36,7 +36,7 @@ def _tidy(panel: pd.DataFrame, model: str, grain_class: str) -> pd.DataFrame:
     for h in FV.HORIZONS:
         d[f"fwd_{h}"] = panel[f"fwd_{h}"] if f"fwd_{h}" in panel.columns else pd.NA
     return d.rename(columns={"y": "actual", "fv": "fair_value", "resid": "residual",
-                             "close_1": "front_close"})
+                             "close_1": "front_close", "close_cm": "price_cm"})
 
 
 def build(db_path: Path = DB_PATH) -> dict:

@@ -178,3 +178,32 @@ def equity_drawdown(curves: pd.DataFrame, legs: list[str], title: str = "", heig
     fig.update_yaxes(tickformat=".2f", ticksuffix="x", row=1, col=1)
     fig.update_yaxes(ticksuffix="%", tickformat=".0f", row=2, col=1)
     return fig
+
+
+def band_fair_value(daily: pd.DataFrame, entity: str, title: str = "") -> go.Figure:
+    """SAFEX (90-day) inside the shaded parity band, with the out-of-sample fair value. One axis, R/t."""
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=daily["date"], y=daily["import_edge"], name="import edge", mode="lines",
+                             line=dict(color=muted(), width=1), hovertemplate="R%{y:,.0f}<extra>import edge</extra>"))
+    fig.add_trace(go.Scatter(x=daily["date"], y=daily["export_edge"], name="export edge", mode="lines",
+                             line=dict(color=muted(), width=1), fill="tonexty", fillcolor="rgba(140,140,133,0.12)",
+                             hovertemplate="R%{y:,.0f}<extra>export edge</extra>"))
+    line(fig, daily["date"], daily["fair_value"], "fair value", entity="aux", width=2,
+         hover="R%{y:,.0f}<extra>fair value</extra>")
+    line(fig, daily["date"], daily["safex"], "SAFEX (90-day)", entity=entity, width=1.6,
+         hover="R%{y:,.0f}<extra>SAFEX</extra>")
+    return layout(fig, title, ytitle="R/t", height=420)
+
+
+def band_position_chart(daily: pd.DataFrame, entity: str, title: str = "") -> go.Figure:
+    """Band position against the fair position, with the band edges at 0 and 1."""
+    fig = go.Figure()
+    for edge in (0, 1):
+        fig.add_hline(y=edge, line=dict(color=muted(), width=1))
+    line(fig, daily["date"], daily["fair_position"], "fair position", entity="aux", width=2,
+         hover="%{y:.2f}<extra>fair position</extra>")
+    line(fig, daily["date"], daily["position"], "position", entity=entity, width=1.4,
+         hover="%{y:.2f}<extra>position</extra>")
+    layout(fig, title, ytitle="position (0 = export, 1 = import)", height=340)
+    fig.update_yaxes(tickformat=".1f")
+    return fig

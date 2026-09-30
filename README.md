@@ -14,13 +14,17 @@ analogues and a backtest engine, built on SAGIS balance sheets and JSE futures.
 | **Fair Value** | Four models (outright, calendar spread, white premium, import/export parity) with IC tests, tercile tables and stability splits |
 | **Analogues** | Compound state builder, forward-path fans, horizon distributions and a backtest engine with overfitting controls |
 | **Release Fade** | Portfolio backtest of the release-day fade across outright, parity, spread and cross legs: threshold, hold, entry timing, costs, stop, weights; Sortino, Calmar, drawdown and deflated Sharpe |
+| **Band Fair Value** | Where SAFEX should sit between export and import parity given stocks-to-use, nowcast from each weekly SAGIS release; rand fair value, band, out-of-sample fit by year |
 | **Positioning** | Trend-model overlay: signal panel, implied flow, validation against CFTC positioning on CBOT corn |
 | **Ask** | Natural-language questions answered by SQL against the warehouse |
 
 ## Method in one paragraph
 
 Everything is **point-in-time**. Each SAGIS release is stored under its own `vintage_date` and never
-restated, so a figure is always what was published that day. Fair value is fitted on an expanding
+restated, so a figure is always what was published that day. Price levels in the fair-value models use
+a 90-day constant-maturity SAFEX price, interpolated between contracts, so the March→May old/new-crop
+roll (up to a 40% one-day jump in the front month) does not enter the models; tradeable returns stay on
+the roll-adjusted front month. Fair value is fitted on an expanding
 window ending the month before, so no model scores a point it has seen. Forward returns enter at the
 first close at least one day after a release, excluding the announcement move. Parity uses the CBOT
 and USD/ZAR prints at 10:00 UTC — the SAFEX mark — because the CBOT settle happens after SAFEX
@@ -57,7 +61,7 @@ python ingest/build_parity.py      # SAGIS import/export parity band (raw files 
 python -m pytest -q
 ```
 
-193 tests covering the parsers (including a reconciliation of weekly to monthly SAGIS), the point-in-time joins, the models, the overfitting statistics,
+230 tests covering the parsers (including a reconciliation of weekly to monthly SAGIS), the point-in-time joins, the models, the overfitting statistics,
 the positioning nowcast and a headless render of every page.
 
 ## Optional: the Ask page
