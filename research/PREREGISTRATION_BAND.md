@@ -190,6 +190,42 @@ All three candidates use **ceiling = floor + cost width**.
 median |distance| for yellow. C3 is reported. No other band is built. The edge trading test gets its
 own addendum after the band is fixed.
 
+## Addendum 3 (after the Addendum 2 run; second attempt at choosing the band)
+
+Written after seeing the Addendum 2 results (commit `36f31f5`). That rule picked B0, and the report
+explains why its criteria could be gamed. This is a **second attempt**, labelled as such. Both
+attempts are reported. No forward return has been computed for any band.
+
+### New candidate
+
+- **B2s (Kalman, sea exports):** B2 exactly, except the pace is an estimate of **deep-sea**
+  exports: published 4-week mean weekly exports minus a cross-border baseline, floored at 0. The
+  baseline is the trailing 12 months of cross-border exports (`exports_whole_border`, each month as
+  first published) ÷ 52.18, from the latest monthly release on or before the day. It needs at least
+  9 months and is scaled to 12. Same pre-registered filter settings; no sensitivity runs.
+
+Candidates scored: B0, B1, B2, B2s.
+
+### New criteria (evaluation window unchanged; yellow decides, white reported)
+
+Monthly flows for evaluation use each month's latest published values (ex post, evaluation only).
+
+- **C1′ breaches:** share of days SAFEX is more than **$10/t below** the floor (the desk trigger).
+  Longest such spell also reported.
+- **C5 import seasons:** days in *deficit months* (that class's imports > exports in the month).
+  The median SAFEX − floor must be at least **half the median cost width** on the same days.
+  Pass/fail.
+- **C2′ accuracy:** days in *strong sea-export months* (harbour exports ≥ 100 kt that month): median
+  |SAFEX − floor| in USD/t.
+- **C3′ speed:** for seasons with harbour exports ≥ 500 kt, the weeks from 1 May to the first day in a
+  strong sea-export month of that season with |SAFEX − floor| ≤ $10. Seasons where it never happens
+  count as 52 weeks. Median across seasons; reported, not decisive.
+- **C4 point in time:** truncation test at 50 dates, exact to 1e-9 (B2s included).
+
+**Decision rule:** a candidate is eligible if it passes C4, C1′ ≤ 10% and C5. Among eligible
+candidates, choose the lowest C2′ for yellow. If none is eligible, no band is adopted and the study
+is parked with that result.
+
 ## Known limitations, stated in advance
 
 - The band edges are implied from SAFEX's own history. Early in the sample, the import edge has not
