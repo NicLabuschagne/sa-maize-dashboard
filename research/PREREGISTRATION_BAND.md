@@ -270,6 +270,43 @@ at the close on d is held from the close on d + 1.
   from first entry, flat days at zero), max drawdown, time in market, entries, hit rate per
   entry. Deflated Sharpe uses the dashboard function with 5 trials.
 
+## Addendum 5: band extremes, with and without the fundamental gap
+
+Motivated by the user reading the Band Fair Value page. SAFEX appears to turn at 0 and 1, and the
+turns look better when the fair position agrees. Written after round 2 (which suggested any reversion
+plays out over longer horizons) and before any event below is computed.
+
+**What is tested:** the band and fair position shown on the dashboard (`app/data/band_fairvalue.py`:
+hybrid band, 90-day price, linear on weekly-nowcast domestic STU). The one change is that the first
+fit is 1 May 2015 (the pre-registered 3-season minimum), so the 2015/16 drought is in sample.
+
+- **Gap:** g = fair position − position (positive = SAFEX low in the band relative to fundamentals).
+- **Long events (export extreme):** position crosses below 0.1 (previous day ≥ 0.1). Re-armed only
+  after position has been back above 0.2 since the last long event.
+- **Short events (import extreme):** position crosses above 0.9. Re-armed after it has been below 0.8.
+- **Classified on the event day:**
+  - *confirmed*: g ≥ +0.2 for a long, g ≤ −0.2 for a short;
+  - *not confirmed*: otherwise.
+  - Edge alone = all events.
+- **Outcome:** arb log return (SAFEX roll-adjusted front − CBOT × USD/ZAR at 10:00 UTC), from the
+  close on d + 1 over h = 20, **40 (primary)**, 60 trading days. Sign-adjusted for shorts. The outright
+  SAFEX return is also reported.
+- **Decomposition:** each event's change in position over h is split into the part from SAFEX moving
+  (edges held at day d) and the part from the edges moving.
+- **Continuous check:** on every day in the long zone (position < 0.1), the Spearman IC of g against
+  the forward 40-day arb return, Newey-West lags 39.
+- **Periods:** development = events before 2023; holdout = 2023 onwards. Yellow decides; white and
+  all short events are reported only.
+
+**Decision rule (yellow, long side, 40 days).** The gap adds value if the mean arb return of
+*confirmed* events exceeds that of *not-confirmed* events in **both** development and holdout, and
+the confirmed holdout mean is > 0. With so few events this is a direction check, not a significance
+test. Event-level t-stats are reported, and the small counts are stated.
+
+**Trade view (descriptive).** Each event is traded for 40 days from the close on d + 1, with the
+dashboard `CostModel` SAFEX round trip plus $0.50/t for the CBOT leg. Mean net per trade and hit rate
+by group.
+
 ## Known limitations, stated in advance
 
 - The band edges are implied from SAFEX's own history. Early in the sample, the import edge has not
