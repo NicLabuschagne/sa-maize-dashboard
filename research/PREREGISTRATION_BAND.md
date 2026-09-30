@@ -307,6 +307,37 @@ test. Event-level t-stats are reported, and the small counts are stated.
 dashboard `CostModel` SAFEX round trip plus $0.50/t for the CBOT leg. Mean net per trade and hit rate
 by group.
 
+## Addendum 6: band extreme AND a short-window z-score of the gap
+
+Motivated by the user. Written after a descriptive check that used no returns: the gap z-score is
+uncorrelated with position (about 0.0) and agrees with the export extreme on about 64% of yellow floor
+days. No forward return for these signals has been computed.
+
+- **Same daily data as Addendum 5:** dashboard band and fair position, first fit May 2015.
+  Gap g = fair position − position.
+- **z_w = (g − rolling mean) / rolling sd over w trading days** (at least 0.8w), for w = 63 (3 months)
+  and 126 (6 months). Both are reported and counted as 2 variants.
+- **Conditions:**
+  - combined long: position < 0.1 and z ≥ 1;
+  - combined short: position > 0.9 and z ≤ −1;
+  - extreme, z disagrees: at the extreme without the z condition;
+  - extreme alone: at the extreme.
+- **Entries:** a condition's entry is a day it holds after at least 5 trading days without it. Entries
+  within 40 days of each other overlap, and this is stated.
+- **Outcome:** arb log return (SAFEX roll-adjusted front − CBOT × USD/ZAR) from the close on d + 1,
+  h = 20, **40 (primary)**, 60. Sign-adjusted for shorts; outright SAFEX reported.
+- **Periods:** development = entries before 2023; holdout = 2023 onwards.
+
+**Decision rule (yellow, long side, 40 days), per window.** It passes if:
+- the combined mean beats the extreme-z-disagrees mean in development;
+- the same holds in the holdout;
+- the combined holdout mean is > 0.
+
+Also reported: the holdout Welch t of combined vs disagrees, with Holm-adjusted p across the 2
+windows. White and the short side are reported only.
+
+**Trade view (descriptive):** a 40-day hold per entry, with dashboard costs as in Addendum 5.
+
 ## Known limitations, stated in advance
 
 - The band edges are implied from SAFEX's own history. Early in the sample, the import edge has not
