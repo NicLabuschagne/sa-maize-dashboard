@@ -1,0 +1,37 @@
+# Band-position study settings. Values are fixed in research/PREREGISTRATION_BAND.md; change them
+# only with an addendum there. Every run logs a hash of this file to output/variants_log.csv.
+
+[units]
+bushels_per_tonne = 39.3683        # corn: 1 bushel = 25.4012 kg; CBOT series is stored in USD/bu
+
+[band]
+export_quantile = 0.05             # floor: 5th percentile of basis over prior days
+import_quantile = 0.95             # ceiling: 95th percentile of excess over prior days
+min_history_days = 500             # ~2 years of trading days before the first band value
+world_price_tolerance_days = 4     # latest CBOT x ZAR print usable within this many days
+
+[stocks]
+days_per_month = 30.44
+primary = "stu_domestic_nowcast"
+variants = ["stu_total", "stu_domestic", "stu_domestic_nowcast"]
+
+[models]
+primary = "log"
+names = ["linear", "log", "logistic", "isotonic"]
+fourier_harmonics = 2
+min_seasons = 5                    # complete marketing years of band history before the first fit
+min_seasons_sensitivity = [3, 4]
+rolling_slope_years = 5
+
+[regimes]
+mid_low = 0.2
+mid_high = 0.8
+
+[truncation]
+n_dates = 50
+seed = 0
+tolerance = 1e-9
+
+[symbols]
+white = "WMAZ"
+yellow = "YMAZ"
