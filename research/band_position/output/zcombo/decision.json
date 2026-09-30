@@ -1,0 +1,31 @@
+{
+  "decisions": {
+    "3m": {
+      "checks": {
+        "development: combined > z disagrees": true,
+        "holdout: combined > z disagrees": false,
+        "holdout: combined mean > 0": false
+      },
+      "passes": false,
+      "holdout_welch_t": -0.9443635686787881,
+      "holdout_welch_p": 0.393252261463226,
+      "holdout_entries_combined": 2,
+      "holdout_entries_disagree": 5,
+      "holdout_welch_p_holm": 0.786504522926452
+    },
+    "6m": {
+      "checks": {
+        "development: combined > z disagrees": true,
+        "holdout: combined > z disagrees": false,
+        "holdout: combined mean > 0": false
+      },
+      "passes": false,
+      "holdout_welch_t": NaN,
+      "holdout_welch_p": NaN,
+      "holdout_entries_combined": 2,
+      "holdout_entries_disagree": 1,
+      "holdout_welch_p_holm": 1.0
+    }
+  },
+  "runs_logged": 1
+}

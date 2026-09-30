@@ -24,6 +24,38 @@ That moved the Release Fade default portfolio from Sharpe 1.05 / max DD −7.64%
 3. Then the edge trading test, pre-registered as in the Addendum 2/3 discussion: yellow, export zone
    within $10 of the floor, 20-day arb return, three gap signals, the desk rule as benchmark.
 
+## Band extreme AND gap z-score (Addendum 6)
+
+Run: `python -m research.band_position.zcombo` (1 run; `output/zcombo/`). Two z windows (3 and
+6 months), threshold ±1, 5-day re-arm, 40-day arb return.
+
+**The pre-registered rule fails for both windows.** Combined beats "extreme, z disagrees" in
+development (3 entries each), but not in the holdout, and the combined holdout mean is negative.
+
+| Yellow long, 40-day arb | 3-month z | 6-month z |
+|---|---|---|
+| Combined, development | 3 entries, −0.7% | 3, +0.7% |
+| Combined, holdout | 2, −9.4% | 2, −10.3% |
+| Extreme, z disagrees, holdout | 5, −2.7% | 1, +11.8% |
+| Holdout Welch p (Holm, 2 windows) | 0.79 | 1.00 |
+
+- **The sample is smaller than the descriptive count suggested.** The 22–31 "stretches" were mostly
+  flickers a day or two apart. With the pre-registered 5-day re-arm, yellow has **5 long entries in
+  11 years** (May 2021, Feb 2022, Apr 2022, Feb 2023, Mar 2023).
+- **The yellow short side (reported, not tested) is one episode each way.** 3-month holdout: 5 entries,
+  +13.6%, t 3.95. But 4 of the 5 are in the 2024/25 drought, and 3 overlap within 40 days. The same
+  signal in the 2015/16 drought lost (−2.6%, +0.7%, −11.4%). Two import episodes with opposite
+  results. That fits the desk view that the short side works eventually but can draw down for a long
+  time; it isn't evidence of an edge.
+- **White (reported):** long combined about 0% in both periods; shorts small and positive.
+
+**Reading.** Tried so far on this band and fair position: raw gap, detrended gap, unpriced move, gap
+confirmation and gap z-score (2 windows). None separates good extreme entries from bad ones on the
+data available. The long side at the export extreme has averaged negative 40-day arb returns in every
+version. The binding constraint is the history: about 5–7 export-extreme entries and 2 import episodes
+since 2015. That's too few to confirm or reject a rule, so further variants on the same history would
+mostly be fitting noise.
+
 ## Band extremes with and without the fundamental gap (Addendum 5)
 
 Run: `python -m research.band_position.run_extremes` (1 run; outputs and `events_*.png` in

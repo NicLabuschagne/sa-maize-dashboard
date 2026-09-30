@@ -392,3 +392,18 @@ def test_short_outcomes_are_sign_adjusted_and_position_change_is_split() -> None
     assert out["fwd_arb_20"].iloc[0] == pytest.approx(-0.20)       # arb rose 1%/day; short loses
     assert out["position_change_20"].iloc[0] == pytest.approx(0.0)
     assert out["from_safex_20"].iloc[0] + out["from_edges_20"].iloc[0] == pytest.approx(out["position_change_20"].iloc[0])
+
+
+# ----------------------------------------------------------------------------- addendum 6: z combo
+from research.band_position import zcombo  # noqa: E402
+
+
+def test_zcombo_entries_rearm_after_five_days_off() -> None:
+    mask = pd.Series([False, True, True, False, False, True, False, False, False, False, False, True])
+    assert zcombo.entries(mask).tolist() == [1, 11]      # row 5 is within 5 days of row 2
+
+
+def test_gap_z_is_standardised_on_the_trailing_window() -> None:
+    gap = pd.Series(np.r_[np.zeros(62), 1.0])
+    z = zcombo.gap_z(gap, 63)
+    assert z.iloc[-1] == pytest.approx((1 - 1 / 63) / pd.Series(np.r_[np.zeros(62), 1.0]).std())
