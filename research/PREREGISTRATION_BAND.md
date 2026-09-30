@@ -104,6 +104,42 @@ Every configuration run is appended to `research/band_position/output/variants_l
 config hash. The count is reported with the results. Thresholds (quantiles, 0.2/0.8, 5 seasons) are
 not tuned.
 
+## Addendum 1 (after round 1, before round 2)
+
+Written after the round-1 results (committed `d318fb6`), so everything below is informed by them
+and is labelled as such.
+
+**Changes**
+- **Price series: constant maturity 90 days** (post-hoc; motivated by jumps at the March→May
+  old-/new-crop roll seen in round 1). On each day, log-linear interpolation in days to expiry
+  between the two main-month contracts bracketing 90 days. Contracts within 7 days of expiry are
+  excluded, as in the dashboard roll rule. If no contract is at or below 90 days, the nearest
+  contract above is used. 90 days was chosen because it is the longest gap between SAFEX main months
+  (Sep→Dec, Dec→Mar), so two contracts nearly always bracket it. Not tuned; no other tenor is run.
+- **Primary model: linear** (post-hoc; it had the best round-1 out-of-sample fit for both classes).
+  Its round-2 results are therefore not an independent confirmation. Independent evidence comes
+  only from weeks after 30 Sep 2026.
+- Yellow is the primary class; white is reported alongside.
+
+**Added reporting**
+- Out-of-sample R² for calendar years and for the windows 2020-01 → 2026-09 and 2023-01 → 2026-09.
+  Every fit still starts in May 2017 and is expanding; these windows only select which predictions
+  are scored.
+- Out-of-sample R² and within-stage Spearman by season stage.
+
+**IC of the fair value (first tradeability look)**
+- Daily fair position: each day uses the primary model fitted on weekly snapshots before that
+  day's week. Daily fair value in R/t = export edge + fair position × band width.
+- Signal = fair position − position (positive = cheap vs fair).
+- Benchmark signal = expanding mean of position − position (plain mean reversion, no balance sheet).
+- Outcomes, entered at the **next** close (d+1) and measured to d+1+h, for h = 5, 10, 20, 40 trading
+  days: (a) change in band position; (b) roll-adjusted log return of the SAFEX front month (the
+  tradeable outright).
+- Statistics: Spearman IC on daily observations. Newey-West t-stat on the slope of outcome on the
+  standardised signal, lags = h − 1. Effective N = observations ÷ h. Windows: full OOS, 2020–2026,
+  2023–2026.
+- This is a first look at tradeability, not a strategy. No thresholds, no costs.
+
 ## Known limitations, stated in advance
 
 - The band edges are implied from SAFEX's own history. Early in the sample, the import edge has not

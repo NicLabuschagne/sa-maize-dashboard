@@ -163,6 +163,39 @@ def score_predictions(predictions: pd.DataFrame, mid_low: float, mid_high: float
     return result
 
 
+def score_windows(predictions: pd.DataFrame, windows: list[list[str]]) -> pd.DataFrame:
+    """Out-of-sample R^2 by calendar year and for fixed date windows. The fits are unchanged (expanding
+    from the first out-of-sample week); a window only selects which predictions are scored."""
+    scored = predictions.dropna(subset=["fair_position"])
+    periods = [(str(year), f"{year}-01-01", f"{year}-12-31") for year in sorted(scored["date"].dt.year.unique())]
+    periods += [(f"{start[:7]} to {end[:7]}", start, end) for start, end in windows]
+    rows = []
+    for label, start, end in periods:
+        part = scored[(scored["date"] >= start) & (scored["date"] <= end)]
+        rows.append({"period": label, "weeks": int(len(part)),
+                     "oos_r2": out_of_sample_r2(part.position, part.fair_position, part.naive),
+                     "mean_abs_error": float((part.position - part.fair_position).abs().mean()),
+                     "mean_abs_error_naive": float((part.position - part.naive).abs().mean())})
+    return pd.DataFrame(rows)
+
+
+def score_by_stage(predictions: pd.DataFrame, snapshots: pd.DataFrame, stu_column: str) -> pd.DataFrame:
+    """Per season stage: out-of-sample R^2 and the full-sample Spearman of STU with position within
+    the stage (descriptive), so a weak stage can be separated from a missing one."""
+    scored = predictions.dropna(subset=["fair_position"]).copy()
+    scored["stage"] = scored["date"].dt.month.map(SEASON_STAGES)
+    sample = snapshots.dropna(subset=["position", stu_column]).copy()
+    sample["stage"] = sample["date"].dt.month.map(SEASON_STAGES)
+    rows = []
+    for stage in dict.fromkeys(SEASON_STAGES.values()):
+        part, within = scored[scored.stage == stage], sample[sample.stage == stage]
+        rows.append({"stage": stage, "weeks_all": int(len(within)), "weeks_oos": int(len(part)),
+                     "stu_median": float(within[stu_column].median()),
+                     "spearman_within_stage": float(stats.spearmanr(within[stu_column], within["position"]).statistic),
+                     "oos_r2": out_of_sample_r2(part.position, part.fair_position, part.naive)})
+    return pd.DataFrame(rows)
+
+
 def binned_means(snapshots: pd.DataFrame, stu_column: str, bins: int = 5) -> pd.DataFrame:
     """Mean and spread of position by STU quintile: a model-free look at the shape (descriptive)."""
     data = snapshots.dropna(subset=["position", stu_column])
@@ -174,8 +207,9 @@ def binned_means(snapshots: pd.DataFrame, stu_column: str, bins: int = 5) -> pd.
     return table.reset_index()
 
 
-def rolling_slope(snapshots: pd.DataFrame, stu_column: str, years: int, harmonics: int) -> pd.DataFrame:
-    """Slope of the log model fitted on the trailing `years` of weekly snapshots, at each week. Shows
+def rolling_slope(snapshots: pd.DataFrame, stu_column: str, years: int, harmonics: int,
+                  name: str = "log") -> pd.DataFrame:
+    """Slope of model `name` fitted on the trailing `years` of weekly snapshots, at each week. Shows
     whether the relationship drifts in a way the expanding fit would average away."""
     data = snapshots.dropna(subset=["position", stu_column])
     data = data[data[stu_column] > 0].reset_index(drop=True)
@@ -184,7 +218,7 @@ def rolling_slope(snapshots: pd.DataFrame, stu_column: str, years: int, harmonic
         window = data[(data["date"] > data["date"].iloc[t] - pd.DateOffset(years=years))
                       & (data["date"] <= data["date"].iloc[t])]
         if window["date"].iloc[0] <= data["date"].iloc[t] - pd.DateOffset(years=years) + pd.Timedelta(days=14):
-            slopes[t] = fit_model("log", window, stu_column, harmonics).slope
+            slopes[t] = fit_model(name, window, stu_column, harmonics).slope
     return pd.DataFrame({"date": data["date"], "rolling_slope": slopes})
 
 

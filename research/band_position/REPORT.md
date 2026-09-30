@@ -1,4 +1,74 @@
-# Band position vs the balance sheet: results, round 1
+# Band position vs the balance sheet
+
+## Round 2 (Addendum 1): constant-maturity price, linear primary, recent periods, IC
+
+Run: config hash `c320056ceae8`; **2 configurations run in total** (`output/variants_log.csv`).
+Truncation test again 100/100 exact. The linear primary was chosen after round 1, so these
+numbers are not an independent confirmation.
+
+**Roll fix.** 90-day constant maturity removes every daily move above 8% (front month: 10 white,
+7 yellow, up to 42% at a roll). Out-of-sample fit is about the same as round 1 (white 0.22 → 0.20,
+yellow 0.24 → 0.21): the season terms had been partly absorbing the roll jumps.
+
+**Fit: primary model (linear, weekly-nowcast domestic STU), OOS R² vs expanding mean**
+
+| Period | White | Yellow |
+|---|---|---|
+| Full OOS (May 2017 – Sep 2026) | 0.20 | 0.21 |
+| 2020-01 – 2026-09 | 0.08 | 0.15 |
+| 2023-01 – 2026-09 | 0.18 | 0.19 |
+| 2020 / 2021 / 2022 | −0.25 / 0.28 / −0.21 | −0.95 / 0.41 / 0.46 |
+| 2023 / 2024 / 2025 / 2026 YTD | 0.12 / 0.17 / 0.13 / 0.57 | 0.37 / −0.03 / 0.40 / −0.53 |
+
+Single years are noisy (52 weeks, about 1–2 independent moves each). Yellow 2026 is negative, but
+its mean error is small (0.095 vs 0.084 for the benchmark): position has sat near its long-run mean.
+
+**By season stage (OOS R², within-stage Spearman of STU vs position)**
+
+| Stage | White | Yellow |
+|---|---|---|
+| Harvest (May–Jul) | 0.26, +0.05 | 0.09, +0.08 |
+| Post-harvest (Aug–Oct) | 0.22, −0.56 | 0.25, −0.59 |
+| Mid-season (Nov–Jan) | 0.13, −0.57 | 0.14, −0.48 |
+| Pre-harvest (Feb–Apr) | 0.15, −0.23 | 0.37, −0.19 |
+
+Correction to round 1: Feb–Apr has full data (193 weeks per class) and a weaker but right-signed
+relationship. Harvest is where stocks and position are unrelated. There, deliveries swing the stock
+figure, and the market is pricing the new crop's size.
+
+**IC of the fair value (signal = fair position − position; next-close entry; Newey-West lags h − 1)**
+
+| Window | Outcome | Yellow 5 / 10 / 20 / 40d | White 5 / 10 / 20 / 40d |
+|---|---|---|---|
+| Full OOS | Δ position | 0.00 / 0.00 / 0.02 / 0.06 | 0.02 / 0.00 / 0.00 / 0.06 |
+| Full OOS | SAFEX return | −0.04 / −0.05 / −0.04 / 0.00 | 0.00 / −0.01 / 0.02 / 0.11 |
+| 2020–2026 | SAFEX return | 0.00 / −0.01 / 0.00 / 0.07 | 0.01 / 0.01 / 0.04 / 0.15 |
+| 2023–2026 | SAFEX return | −0.08 / −0.11 / −0.11 / −0.08 | −0.02 / −0.01 / 0.02 / 0.06 |
+
+No NW |t| reaches 2 in any pooled window (largest 1.65). Effective N at 40 days: 57 (full), 41
+(2020+), 22 (2023+). Mean reversion without the balance sheet beats the fair-value signal on
+forward Δ position at every horizon (e.g. yellow 40d, 2020+: 0.18 vs 0.08).
+
+Per-year IC at 20 days is large and positive in 2024 and 2025 (yellow return 0.57 and 0.36; white
+0.65 and 0.80), and negative in 2021. Pooled windows come out near zero while several single years
+are strongly positive. That suggests the signal carries a slow level component that is wrong across
+years while the within-year variation is right. This is a hypothesis for a future pre-registration,
+not a result.
+
+**Round-2 conclusion**
+- **The fair value is a reasonable *description* of where price sits.** OOS R² is about 0.2, and
+  above zero in the recent windows. The rand fair value tracks yellow closely from 2022
+  (`plots/fair_value_2020.png`).
+- **It is not yet a short-horizon *trading* signal.** Pooled IC over 5–40 days is about zero, it
+  doesn't beat plain mean reversion, and none of it is significant.
+- **Gaps close over months, not weeks.** Deviations are very persistent (weekly residual
+  autocorrelation 0.98; 0.37–0.56 at 26 weeks). In 2020–2021, yellow SAFEX sat about R1 000/t below
+  fair value for over a year before converging. Horizons beyond 40 days have too few independent
+  observations to test here.
+
+---
+
+# Round 1: results
 
 Pre-registration: `research/PREREGISTRATION_BAND.md` (written before any fit). Run:
 `python -m research.band_position.run` (config hash `bb776642a53b`, **1 configuration run**; variants
@@ -81,7 +151,8 @@ Fair Value page.
   (wrong sign, p = 0.40). Weak evidence that the price reacts to the stock surprise itself.
 - Full-sample Spearman(STU, position) is about 0 for every version; binned means are hump-shaped.
   Without the season term, low stocks do *not* mean a high position (`plots/position_vs_stu_*.png`).
-  Late in the season (Feb–Apr) stocks are always low, and the market is pricing the new crop.
+  *(Corrected in round 2: the weak window is harvest, May–Jul. Feb–Apr has data and a weaker but
+  right-signed relationship.)*
 
 ## Band facts
 

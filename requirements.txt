@@ -13,3 +13,4 @@ openpyxl>=3.1
 lse-data>=0.14
 pytest>=8
 matplotlib>=3.8   # research/band_position plots
+statsmodels>=0.14 # research/band_position Newey-West

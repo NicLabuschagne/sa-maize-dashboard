@@ -35,6 +35,43 @@ def front_month(prices: pd.DataFrame, symbol: str) -> pd.DataFrame:
     return front.dropna(subset=["safex"]).sort_values("date").reset_index(drop=True)
 
 
+def constant_maturity(prices: pd.DataFrame, symbol: str, tenor_days: int, min_days_to_expiry: int) -> pd.DataFrame:
+    """Price at a fixed `tenor_days` to expiry, so the series does not jump at contract rolls.
+
+    SAFEX's March contract is old crop and May is new crop; a front-month series switches between
+    them in one day. Interpolating log price linearly in days to expiry between the main-month
+    contracts either side of the tenor turns that switch into a gradual blend. If every live contract
+    is beyond the tenor, the nearest one is used; if none reaches it, the day is dropped.
+    """
+    live = prices[(prices.symbol == symbol) & prices.expiry_date.dt.month.isin(F.MAIN_MONTHS)
+                  & (prices.close > 0) & (prices.days_to_expiry >= min_days_to_expiry)]
+    live = live[["trade_date", "days_to_expiry", "close"]].sort_values(["trade_date", "days_to_expiry"])
+    rows = []
+    for date, group in live.groupby("trade_date", sort=True):
+        days, close = group["days_to_expiry"].to_numpy(dtype=float), group["close"].to_numpy(dtype=float)
+        above = np.flatnonzero(days >= tenor_days)
+        if len(above) == 0:
+            continue
+        upper = above[0]
+        if upper == 0:
+            price = close[0]
+        else:
+            lower = upper - 1
+            weight = (tenor_days - days[lower]) / (days[upper] - days[lower])
+            price = float(np.exp((1 - weight) * np.log(close[lower]) + weight * np.log(close[upper])))
+        rows.append({"date": date, "safex": price})
+    frame = pd.DataFrame(rows)
+    frame["date"] = frame["date"].astype("datetime64[ns]")
+    return frame
+
+
+def safex_series(prices: pd.DataFrame, symbol: str, price_settings: dict) -> pd.DataFrame:
+    """The SAFEX price the band is compared with: front month (round 1) or constant maturity."""
+    if price_settings.get("series", "front") == "constant_maturity":
+        return constant_maturity(prices, symbol, price_settings["tenor_days"], price_settings["min_days_to_expiry"])
+    return front_month(prices, symbol)
+
+
 def attach_world_and_costs(front: pd.DataFrame, world: pd.Series, parity: pd.DataFrame,
                            tolerance_days: int) -> pd.DataFrame:
     """Join each SAFEX day to the latest world price (within tolerance) and the latest published SAGIS
@@ -96,7 +133,7 @@ def daily_band_frame(prices: pd.DataFrame, snapshots: pd.DataFrame, parity: pd.D
     """One row per SAFEX trading day: price, world price, the three bands and a position in each."""
     band_settings = settings["band"]
     world = world_price_rand(snapshots, settings["units"]["bushels_per_tonne"])
-    frame = attach_world_and_costs(front_month(prices, symbol), world, parity,
+    frame = attach_world_and_costs(safex_series(prices, symbol, settings.get("price", {})), world, parity,
                                    band_settings["world_price_tolerance_days"])
     frame = prior_day_edges(frame, band_settings["export_quantile"], band_settings["import_quantile"],
                             band_settings["min_history_days"])

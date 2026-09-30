@@ -157,3 +157,61 @@ def test_out_of_sample_r2_is_one_for_perfect_and_zero_for_benchmark() -> None:
     benchmark = pd.Series(np.full(20, 5.0))
     assert models.out_of_sample_r2(actual, actual, benchmark) == pytest.approx(1.0)
     assert models.out_of_sample_r2(actual, benchmark, benchmark) == pytest.approx(0.0)
+
+
+# ----------------------------------------------------------------------------- addendum 1
+def _contracts() -> pd.DataFrame:
+    """Two dates; on the first, contracts at 60 and 120 days bracket the 90-day tenor."""
+    rows = [("2020-01-02", "2020-03-02", 60, 100.0), ("2020-01-02", "2020-05-01", 120, 400.0),
+            ("2020-01-03", "2020-05-01", 95, 200.0), ("2020-01-03", "2020-07-01", 150, 300.0)]
+    frame = pd.DataFrame(rows, columns=["trade_date", "expiry_date", "days_to_expiry", "close"])
+    frame["trade_date"] = pd.to_datetime(frame["trade_date"])
+    frame["expiry_date"] = pd.to_datetime(frame["expiry_date"])
+    frame["symbol"] = "YMAZ"
+    return frame
+
+
+def test_constant_maturity_interpolates_log_price_in_days() -> None:
+    series = band.constant_maturity(_contracts(), "YMAZ", 90, 7).set_index("date")["safex"]
+    assert np.isclose(series.iloc[0], np.exp(0.5 * np.log(100) + 0.5 * np.log(400)))  # halfway: 200
+    assert np.isclose(series.iloc[1], 200.0)   # every contract beyond the tenor: nearest one
+
+
+def test_score_windows_only_selects_predictions() -> None:
+    dates = pd.date_range("2019-12-06", periods=60, freq="W-FRI")
+    predictions = pd.DataFrame({"date": dates, "position": np.linspace(0, 1, 60),
+                                "fair_position": np.linspace(0, 1, 60), "naive": 0.5})
+    table = models.score_windows(predictions, [["2020-06-01", "2020-12-31"]]).set_index("period")
+    assert table.loc["2020", "weeks"] == 52
+    assert table.loc["2020-06 to 2020-12", "oos_r2"] == pytest.approx(1.0)
+
+
+def test_ic_statistics_detects_signal_and_reports_effective_n() -> None:
+    from research.band_position import tradeability
+
+    rng = np.random.default_rng(0)
+    signal = pd.Series(rng.normal(size=2000))
+    outcome = 0.3 * signal + pd.Series(rng.normal(size=2000))
+    result = tradeability.ic_statistics(signal, outcome, horizon=10)
+    assert result["ic"] > 0.2 and result["nw_t"] > 3
+    assert result["effective_n"] == pytest.approx(200)
+
+
+def test_daily_fair_position_uses_only_earlier_weeks() -> None:
+    from research.band_position import tradeability
+
+    days = pd.bdate_range("2012-01-02", periods=1500)
+    rng = np.random.default_rng(3)
+    stu = np.exp(rng.normal(np.log(0.4), 0.3, len(days)))
+    daily = pd.DataFrame({"date": days, "safex": 100.0, "position": 0.3 - 0.4 * np.log(stu),
+                          "hybrid_export": 90.0, "hybrid_import": 110.0, "stu": stu})
+    first = pd.Timestamp("2016-01-01")
+    base = tradeability.daily_fair_position(daily, "stu", "linear", first, 2)
+    shocked = daily.copy()
+    cut = shocked["date"] > pd.Timestamp("2016-06-03")        # a Friday
+    shocked.loc[cut, "position"] += 10
+    after = tradeability.daily_fair_position(shocked, "stu", "linear", first, 2)
+    upto = base["date"] <= pd.Timestamp("2016-06-10")          # the week after is fitted on data to 6/3
+    assert np.allclose(base.loc[upto, "fair_position"], after.loc[upto, "fair_position"], equal_nan=True)
+    # the first out-of-sample week can start a few days before `first`; nothing earlier is predicted
+    assert base.loc[base["date"] < first - pd.Timedelta(days=7), "fair_position"].isna().all()

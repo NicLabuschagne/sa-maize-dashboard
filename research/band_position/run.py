@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from research.band_position import band, models, pipeline, stocks  # noqa: E402
+from research.band_position import band, models, pipeline, stocks, tradeability  # noqa: E402
 from research.band_position.inputs import Inputs, inputs_as_of, load_inputs  # noqa: E402
 from research.band_position.settings import config_hash, load_settings  # noqa: E402
 
@@ -110,7 +110,7 @@ def plot_price_with_band(daily: pd.DataFrame, grain_class: str, path: Path) -> N
                       alpha=0.15, linewidth=0, label="Hybrid band (primary)")
     axis.plot(daily["date"], daily["sagis_export"], color=INK_MUTED, linewidth=1, linestyle="--", label="SAGIS band")
     axis.plot(daily["date"], daily["sagis_import"], color=INK_MUTED, linewidth=1, linestyle="--")
-    axis.plot(daily["date"], daily["safex"], color=SERIES_COLORS[1], linewidth=1.2, label=f"SAFEX {grain_class} front")
+    axis.plot(daily["date"], daily["safex"], color=SERIES_COLORS[1], linewidth=1.2, label=f"SAFEX {grain_class} (90-day constant maturity)")
     _style(axis, f"{grain_class.title()} maize: SAFEX inside the parity band", "R/t")
     axis.legend(frameon=False, fontsize=8, loc="upper left")
     figure.tight_layout()
@@ -152,7 +152,7 @@ def plot_position_vs_stu(snapshots: pd.DataFrame, stu_column: str, grain_class: 
 
 
 def plot_slopes(slope_frames: dict, path: Path) -> None:
-    """Expanding-fit slope and trailing-5-year slope of the log model, per class."""
+    """Expanding-fit slope and trailing-5-year slope of the primary model, per class."""
     figure, axes = plt.subplots(2, 1, figsize=(11, 5.5), sharex=True, facecolor=SURFACE)
     for axis, grain_class in zip(axes, GRAIN_CLASSES):
         expanding, rolling = slope_frames[grain_class]
@@ -160,7 +160,7 @@ def plot_slopes(slope_frames: dict, path: Path) -> None:
         axis.plot(expanding["date"], expanding["slope"], color=SERIES_COLORS[0], linewidth=1.5, label="expanding fit")
         axis.plot(rolling["date"], rolling["rolling_slope"], color=SERIES_COLORS[1], linewidth=1.2,
                   label="trailing 5 years")
-        _style(axis, f"{grain_class.title()}: slope of position on log STU (log model)", "slope")
+        _style(axis, f"{grain_class.title()}: STU slope of the primary model", "slope")
         axis.legend(frameon=False, fontsize=8, loc="upper left")
     figure.tight_layout()
     figure.savefig(path, dpi=130)
@@ -181,6 +181,46 @@ def plot_residual_acf(acf_by_class: dict, path: Path) -> None:
     plt.close(figure)
 
 
+def plot_fair_value(fair_by_class_daily: dict, start: str, path: Path) -> None:
+    """SAFEX (constant maturity) against the rand fair value and band since `start`, per class."""
+    figure, axes = plt.subplots(2, 1, figsize=(11, 6.5), sharex=True, facecolor=SURFACE)
+    for axis, grain_class in zip(axes, GRAIN_CLASSES):
+        frame = fair_by_class_daily[grain_class]
+        frame = frame[frame["date"] >= start]
+        axis.fill_between(frame["date"], frame["hybrid_export"], frame["hybrid_import"], color=SERIES_COLORS[0],
+                          alpha=0.12, linewidth=0, label="band")
+        axis.plot(frame["date"], frame["fair_value"], color=SERIES_COLORS[0], linewidth=1.6, label="fair value")
+        axis.plot(frame["date"], frame["safex"], color=SERIES_COLORS[1], linewidth=1.1, label="SAFEX (90-day)")
+        _style(axis, f"{grain_class.title()}: SAFEX vs out-of-sample fair value", "R/t")
+        axis.legend(frameon=False, fontsize=8, loc="upper left")
+    figure.tight_layout()
+    figure.savefig(path, dpi=130)
+    plt.close(figure)
+
+
+def plot_ic_decay(ic: pd.DataFrame, window: str, path: Path) -> None:
+    """IC by horizon for the fair-value signal and the mean-reversion benchmark, per class and outcome."""
+    figure, axes = plt.subplots(1, 2, figsize=(11, 4), sharey=True, facecolor=SURFACE)
+    part = ic[ic["window"] == window]
+    for axis, outcome in zip(axes, ("position", "return")):
+        styles = [("yellow", "signal", SERIES_COLORS[0], "-"), ("yellow", "benchmark_signal", SERIES_COLORS[0], ":"),
+                  ("white", "signal", SERIES_COLORS[1], "-"), ("white", "benchmark_signal", SERIES_COLORS[1], ":")]
+        for grain_class, signal, color, line in styles:
+            rows = part[(part.grain_class == grain_class) & (part.signal == signal) & (part.outcome == outcome)]
+            label = f"{grain_class}, {'fair value' if signal == 'signal' else 'mean reversion only'}"
+            axis.plot(rows["horizon"], rows["ic"], color=color, linestyle=line, linewidth=2, marker="o",
+                      markersize=5, label=label)
+        axis.axhline(0, color=INK_MUTED, linewidth=0.8)
+        target = "change in band position" if outcome == "position" else "SAFEX front return"
+        _style(axis, f"IC vs forward {target} ({window})", "Spearman IC")
+        axis.set_xlabel("horizon (trading days)", color=INK_SECONDARY, fontsize=9)
+        axis.set_xticks([5, 10, 20, 40])
+    axes[0].legend(frameon=False, fontsize=8)
+    figure.tight_layout()
+    figure.savefig(path, dpi=130)
+    plt.close(figure)
+
+
 # ----------------------------------------------------------------------------- main
 def run(output_dir: Path = OUTPUT_DIR, skip_truncation: bool = False) -> dict:
     """Execute the pre-registered study and write every table and plot. Returns a summary dict."""
@@ -191,8 +231,10 @@ def run(output_dir: Path = OUTPUT_DIR, skip_truncation: bool = False) -> dict:
     primary_stu, primary_model = settings["stocks"]["primary"], settings["models"]["primary"]
     monthly = stocks.monthly_stocks(inputs.balance_sheet)
 
-    daily_by_class, fair_by_class, slope_frames, acf_by_class = {}, {}, {}, {}
+    daily_by_class, fair_by_class, slope_frames, acf_by_class, fair_daily_by_class = {}, {}, {}, {}, {}
     fit_tables, outside_rows, binned_tables, release_rows, baseline_rows = [], [], [], [], []
+    window_tables, stage_tables, ic_tables, ic_year_tables = [], [], [], []
+    horizons = settings["tradeability"]["horizons"]
     for grain_class in GRAIN_CLASSES:
         daily = pipeline.build_daily(inputs, grain_class, settings)
         daily_by_class[grain_class] = daily
@@ -209,7 +251,20 @@ def run(output_dir: Path = OUTPUT_DIR, skip_truncation: bool = False) -> dict:
         primary = predictions[(primary_model, primary_stu)]
         fair_by_class[grain_class] = primary
         slope_frames[grain_class] = (primary, models.rolling_slope(
-            snapshots, primary_stu, settings["models"]["rolling_slope_years"], settings["models"]["fourier_harmonics"]))
+            snapshots, primary_stu, settings["models"]["rolling_slope_years"], settings["models"]["fourier_harmonics"],
+            primary_model))
+        window_tables.append(models.score_windows(primary, settings["scoring"]["windows"]).assign(grain_class=grain_class))
+        stage_tables.append(models.score_by_stage(primary, snapshots, primary_stu).assign(grain_class=grain_class))
+
+        fair_daily = tradeability.daily_fair_position(daily, primary_stu, primary_model, first_date,
+                                                      settings["models"]["fourier_harmonics"])
+        fair_daily = tradeability.forward_outcomes(fair_daily, inputs.prices, settings["symbols"][grain_class],
+                                                   horizons, settings["tradeability"]["entry_lag_days"])
+        fair_daily_by_class[grain_class] = fair_daily
+        ic_windows = [("full OOS", str(first_date.date()), "2100-01-01")]
+        ic_windows += [(f"{start[:7]} to {end[:7]}", start, end) for start, end in settings["scoring"]["windows"]]
+        ic_tables.append(tradeability.ic_table(fair_daily, horizons, ic_windows).assign(grain_class=grain_class))
+        ic_year_tables.append(tradeability.ic_by_year(fair_daily, 20).assign(grain_class=grain_class))
         acf_by_class[grain_class] = models.residual_autocorrelation(primary)
         for stu_column in settings["stocks"]["variants"]:
             binned = models.binned_means(snapshots, stu_column).assign(grain_class=grain_class, stu=stu_column)
@@ -225,13 +280,22 @@ def run(output_dir: Path = OUTPUT_DIR, skip_truncation: bool = False) -> dict:
         plot_position_vs_stu(snapshots, primary_stu, grain_class,
                              output_dir / "plots" / f"position_vs_stu_{grain_class}.png")
     plot_positions(daily_by_class, settings, output_dir / "plots" / "band_position.png")
-    plot_slopes(slope_frames, output_dir / "plots" / "slope_log_model.png")
+    plot_slopes(slope_frames, output_dir / "plots" / "slope_primary_model.png")
     plot_residual_acf(acf_by_class, output_dir / "plots" / "residual_acf.png")
+    plot_fair_value(fair_daily_by_class, "2020-01-01", output_dir / "plots" / "fair_value_2020.png")
+    ic_all = pd.concat(ic_tables, ignore_index=True)
+    plot_ic_decay(ic_all, "full OOS", output_dir / "plots" / "ic_decay_full.png")
+    plot_ic_decay(ic_all, "2020-01 to 2026-09", output_dir / "plots" / "ic_decay_2020.png")
 
     tables = {"fit_results": pd.concat(fit_tables, ignore_index=True),
               "outside_band": pd.DataFrame(outside_rows), "binned_means": pd.concat(binned_tables, ignore_index=True),
               "release_day_check": pd.DataFrame(release_rows), "baseline_model_a": pd.DataFrame(baseline_rows),
-              "residual_acf": pd.DataFrame(acf_by_class)}
+              "residual_acf": pd.DataFrame(acf_by_class),
+              "oos_by_period": pd.concat(window_tables, ignore_index=True),
+              "oos_by_stage": pd.concat(stage_tables, ignore_index=True),
+              "ic": ic_all, "ic_by_year_20d": pd.concat(ic_year_tables, ignore_index=True),
+              "fair_value_daily": pd.concat([f.assign(grain_class=c) for c, f in fair_daily_by_class.items()],
+                                            ignore_index=True)}
     if not skip_truncation:
         tables["truncation_test"] = truncation_test(inputs, daily_by_class, fair_by_class, settings)
     for name, table in tables.items():

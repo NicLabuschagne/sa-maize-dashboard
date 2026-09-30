@@ -4,6 +4,11 @@
 [units]
 bushels_per_tonne = 39.3683        # corn: 1 bushel = 25.4012 kg; CBOT series is stored in USD/bu
 
+[price]
+series = "constant_maturity"      # "front" (round 1) or "constant_maturity" (addendum 1)
+tenor_days = 90
+min_days_to_expiry = 7
+
 [band]
 export_quantile = 0.05             # floor: 5th percentile of basis over prior days
 import_quantile = 0.95             # ceiling: 95th percentile of excess over prior days
@@ -16,12 +21,19 @@ primary = "stu_domestic_nowcast"
 variants = ["stu_total", "stu_domestic", "stu_domestic_nowcast"]
 
 [models]
-primary = "log"
+primary = "linear"                 # addendum 1: was "log" in round 1
 names = ["linear", "log", "logistic", "isotonic"]
 fourier_harmonics = 2
 min_seasons = 5                    # complete marketing years of band history before the first fit
 min_seasons_sensitivity = [3, 4]
 rolling_slope_years = 5
+
+[scoring]
+windows = [["2020-01-01", "2026-09-30"], ["2023-01-01", "2026-09-30"]]
+
+[tradeability]
+horizons = [5, 10, 20, 40]
+entry_lag_days = 1
 
 [regimes]
 mid_low = 0.2
